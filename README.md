@@ -79,6 +79,7 @@ The script outputs the following:
 -   ServiceAccount Email    
 -   Path to ServiceAccount Json key
 
+---
 
 # Migrate
 
