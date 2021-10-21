@@ -28,15 +28,15 @@ function ImportModules() {
     Write-Progress "Importing AzureAD Module"
     Import-Module AzureAD
 
-    Write-Progress "Checking if ADAL.PS module is installed"
-    if (!(Get-Module -ListAvailable -Name ADAL.PS)) {
-        Write-Progress "Installing ADAL.PS Module"
-        Write-Host "Installing ADAL.PS Module..." -ForegroundColor DarkGreen
-        Install-Module ADAL.PS -Confirm:$false -Force
+    Write-Progress "Checking if MSAL.PS module is installed"
+    if (!(Get-Module -ListAvailable -Name MSAL.PS)) {
+        Write-Progress "Installing MSAL.PS Module"
+        Write-Host "Installing MSAL.PS Module..." -ForegroundColor DarkGreen
+        Install-Module -Name MSAL.PS -RequiredVersion 4.2.1.3 -Confirm:$false -Force
     }
 
-    Write-Progress "Importing ADAL.PS Module"
-    Import-Module ADAL.PS
+    Write-Progress "Importing MSAL.PS Module"
+    Import-Module MSAL.PS
 }
 
 function CreateConnection($username, $password, $skipMfaLoginError) {
@@ -74,13 +74,12 @@ function CreateCredential($username, $password) {
 
 function CreateApplication($appNameProvided) {
     $appName = "CloudM Migrate"
-    $appURI = "https://cloudm.co/product/migrate"
+    
     if (-not ([string]::IsNullOrWhiteSpace($appNameProvided))){
       $appName = $appNameProvided
-      $appURI = "https://cloudm.co/product/" + $appNameProvided
     }
     $appHomePageUrl = "https://cloudm.co/"
-    $appReplyURLs = @($appURI, $appHomePageURL, "https://localhost")
+    $appReplyURLs = @($appHomePageURL, "https://localhost")
 
     # Check if app has already been installed
     Write-Progress "Checking if app already exists"
@@ -88,11 +87,14 @@ function CreateApplication($appNameProvided) {
     if ($app = Get-AzureADApplication -Filter "DisplayName eq '$($appName)'" -ErrorAction SilentlyContinue) {
         Write-Progress "App already exists"
         Write-Host "App already exists" -ForegroundColor Yellow
-        Set-AzureADApplication -ObjectId $app.ObjectId -DisplayName $appName -IdentifierUris $appURI -Homepage $appHomePageUrl -ReplyUrls $appReplyURLs -RequiredResourceAccess $requiredResourceAccess 
+        $appURI = "api://" + $app.AppId
+        Set-AzureADApplication -ObjectId $app.ObjectId -DisplayName $appName -Homepage $appHomePageUrl -IdentifierUris @($appURI) -ReplyUrls $appReplyURLs -RequiredResourceAccess $requiredResourceAccess 
         return $app
     }
     Write-Progress "Adding new Azure AD application"
-    return New-AzureADApplication -DisplayName $appName -IdentifierUris $appURI -Homepage $appHomePageUrl -ReplyUrls $appReplyURLs -RequiredResourceAccess $requiredResourceAccess 
+    $app = New-AzureADApplication -DisplayName $appName -Homepage $appHomePageUrl -ReplyUrls $appReplyURLs -RequiredResourceAccess $requiredResourceAccess
+    $appURI = "api://" + $app.AppId
+    Set-AzureADApplication -ObjectId $app.ObjectId -IdentifierUri @($appURI)
 }
 
 function CreateCertificate($appId, $certFolder, $certName, $certPassword, $certStartDate, $certEndDate) {
@@ -251,9 +253,6 @@ function GenerateApplicationApiPermissions() {
     $exchangeAccess = GetExchangeApiPermissions
     $requiredResourceAccess.Add($exchangeAccess)
 
-    $addGraphAccess = GetADDGraphApiPermissions
-    $requiredResourceAccess.Add($addGraphAccess)
-
     return $requiredResourceAccess;
 }
 
@@ -281,7 +280,8 @@ function GetMicrosoftGraphApiPermissions() {
         "9492366f-7969-46a4-8d15-ed1a20078fff",
         "df021288-bdef-4463-88db-98f22de89214",
         "913b9306-0ce1-42b8-9137-6a7df690a760",
-        "35930dcf-aceb-4bd1-b99a-8ffed403c974"
+        "35930dcf-aceb-4bd1-b99a-8ffed403c974",        
+        "7ab1d382-f21e-4acd-a863-ba3e13f7da61"
     )
 
     return GenerateRequiredResourceAccess -resourceAppId $graphAppId -roles $roles
@@ -295,13 +295,6 @@ function GetExchangeApiPermissions() {
     return GenerateRequiredResourceAccess -resourceAppId $exchangeAppId -roles $roles
 }
 
-function GetADDGraphApiPermissions() {
-    #AAD Graph API app permissions
-    $addGraphAppId = "00000002-0000-0000-c000-000000000000"
-    $roles = @("5778995a-e1bf-45b8-affa-663a9f3f4d04")
-
-    return GenerateRequiredResourceAccess -resourceAppId $addGraphAppId -roles $roles
-}
 
 function GenerateRequiredResourceAccess($resourceAppId, $roles) {
     $requiredResourceAccess = New-Object Microsoft.Open.AzureAD.Model.RequiredResourceAccess
@@ -374,8 +367,8 @@ function TestConnection($tenantId, $clientId, $username, $certPath, $certPasswor
             $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
             $certificate.Import($certPath, $certPassword, 'DefaultKeySet')
 
-            $MSGraphToken = Get-AdalToken -TenantId $tenantId -Resource 'https://graph.microsoft.com/' -ClientId $clientId -ClientAssertionCertificate $certificate
-
+            $MSGraphToken = Get-MsalToken -TenantId $tenantId -Scope 'https://graph.microsoft.com/.default' -ClientId $clientId -ClientCertificate $certificate
+            
             Write-Progress "Requesting user from graph api"
             $url = "https://graph.microsoft.com/v1.0/users/" + $username
             $token = "bearer " + $MSGraphToken.AccessToken
@@ -468,7 +461,7 @@ function CreateAppRegistration($username, $password, $certFolder, $certName, $ce
         Write-Host "Assigned application permissions" -ForegroundColor DarkGreen
 
         # Test Application connection
-        $certPath = $certFolder + "/" + $certName + ".pfx"
+        $certPath = $certFolder + "\\" + $certName + ".pfx"
         $success = TestConnection -tenantId $tenantId -clientId $appId -username $connection.Account.Id -certPath $certPath -certPassword $certPassword
 
         # Return appid if user friendly output is disabled
@@ -502,3 +495,4 @@ function CreateAzureAppRegistration() {
 
     CreateAppRegistration -certFolder $location -certPassword $certPassword -userOutput $true
 }
+CreateAzureAppRegistration
