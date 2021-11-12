@@ -506,21 +506,11 @@ Function Configure-GCP-For-Migrate ([string]$ProjectId, [string]$ServiceAccountI
        
             Write-Host ""
 
-            # Open Url at Service Account to Enable Domain Wide Delegation
-            Write-Log $LogPath "Step 2. Service Account Domain Wide Delegation" $true
-
-            Write-Host ""
-
-            Write-Log $LogPath "To configure, use a browser and navigate to the following url: https://console.cloud.google.com/iam-admin/serviceaccounts/details/$ServiceAccountClientId;edit=true?project=$ProjectId"
-
-            Write-Host ""
-    
-
             $ScopesToUse = Build-Scopes-List $Scope
 
             $ConcatenatedScopes = $ScopesToUse -join ','
 
-            Write-Log $LogPath "Step 3. Configure Google Workspace Domain Wide Delegation using the following ClientId and Scopes:" $true
+            Write-Log $LogPath "Step 2. Configure Google Workspace Domain Wide Delegation using the following ClientId and Scopes:" $true
             Write-Host ""
             Write-Log $LogPath "ClientId: $ServiceAccountClientId"
             Write-Log $LogPath "Scopes: $ConcatenatedScopes"
@@ -531,7 +521,7 @@ Function Configure-GCP-For-Migrate ([string]$ProjectId, [string]$ServiceAccountI
     
             Write-Host ""
 
-            Write-Log $LogPath "Step 4. Service Account details for use in CloudM Migrate:" $true
+            Write-Log $LogPath "Step 3. Service Account details for use in CloudM Migrate:" $true
 
             Write-Host ""
             Write-Log $LogPath "Email: $ServiceAccountEmail"
