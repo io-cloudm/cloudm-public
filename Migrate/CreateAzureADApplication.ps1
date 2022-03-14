@@ -281,7 +281,8 @@ function GetMicrosoftGraphApiPermissions() {
         "df021288-bdef-4463-88db-98f22de89214",
         "913b9306-0ce1-42b8-9137-6a7df690a760",
         "35930dcf-aceb-4bd1-b99a-8ffed403c974",        
-        "7ab1d382-f21e-4acd-a863-ba3e13f7da61"
+        "7ab1d382-f21e-4acd-a863-ba3e13f7da61",
+        "294ce7c9-31ba-490a-ad7d-97a7d075e4ed"
     )
 
     return GenerateRequiredResourceAccess -resourceAppId $graphAppId -roles $roles
@@ -461,7 +462,7 @@ function CreateAppRegistration($username, $password, $certFolder, $certName, $ce
         Write-Host "Assigned application permissions" -ForegroundColor DarkGreen
 
         # Test Application connection
-        $certPath = $certFolder + "\\" + $certName + ".pfx"
+        $certPath = $certFolder + "/" + $certName + ".pfx"
         $success = TestConnection -tenantId $tenantId -clientId $appId -username $connection.Account.Id -certPath $certPath -certPassword $certPassword
 
         # Return appid if user friendly output is disabled
