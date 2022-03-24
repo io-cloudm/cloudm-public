@@ -95,6 +95,7 @@ function CreateApplication($appNameProvided) {
     $app = New-AzureADApplication -DisplayName $appName -Homepage $appHomePageUrl -ReplyUrls $appReplyURLs -RequiredResourceAccess $requiredResourceAccess
     $appURI = "api://" + $app.AppId
     Set-AzureADApplication -ObjectId $app.ObjectId -IdentifierUri @($appURI)
+    return $app
 }
 
 function CreateCertificate($appId, $certFolder, $certName, $certPassword, $certStartDate, $certEndDate) {
