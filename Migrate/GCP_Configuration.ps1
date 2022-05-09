@@ -5,7 +5,7 @@
   Performs GCP Project, Service Account and API configuration for CloudM Migrate.
 
   .DESCRIPTION
-  The GCP_Configuration.ps1 script creates or sets a GCP Project as default, creates a service account and p12 key, adds the service account as roles/owner on the project
+  The GCP_Configuration.ps1 script creates or sets a GCP Project as default, creates a service account and key, adds the service account as roles/owner on the project
   and enables the GCP APIs based on the scope passed to the script.
 
   .PARAMETER ProjectId
@@ -18,10 +18,13 @@
 
   .PARAMETER Scope
   Specifies the scopes required for the ClouM Migrate. Scope must be one of 'All', 'Standard', 'SourceLimited', 'DestinationLimited','Vault' or 'Storage'.
+
+  .PARAMETER KeyType
+  Specifies a the type of key to generate. Must be one of 'P12' or 'JSON'. P12 is used as a default
   
   .PARAMETER OutputPath
-  Specifies a path to output the script log and service account p12 key to. If not provided C:\CloudM\GCPConfig is used as a default
-  
+  Specifies a path to output the script log and service account key to. If not provided C:\CloudM\GCPConfig is used as a default
+    
   .INPUTS
   None. You cannot pipe objects to GCP_Configuration.ps1.
 
@@ -29,13 +32,13 @@
   None. GCP_Configuration.ps1 does not generate any output.
 
   .EXAMPLE
-  PS> .\GCP_Configuration.ps1 test-cloudm-io-migrate test-service-account-1 Standard
+  PS> .\GCP_Configuration.ps1 test-cloudm-io-migrate test-service-account-1 Standard P12
 
   .EXAMPLE
-  PS> .\GCP_Configuration.ps1 test-cloudm-io-migrate test-service-account-1 Vault
+  PS> .\GCP_Configuration.ps1 test-cloudm-io-migrate test-service-account-1 Vault JSON
 
   .EXAMPLE
-  PS> .\GCP_Configuration.ps1 test-cloudm-io-migrate test-service-account-1 Standard C:\TestConfig
+  PS> .\GCP_Configuration.ps1 test-cloudm-io-migrate test-service-account-1 Standard JSON C:\TestConfig
 #>
 [CmdletBinding()]
 param(
@@ -59,10 +62,18 @@ param(
     [String]
     $Scope = "Standard",
 
-    [Parameter(Mandatory=$false, Position=3, ValueFromPipeline=$false, HelpMessage="Output Path for P12 key and log e.g. C:\CloudM\GCPConfig")]
+    [Parameter(Mandatory=$true, Position=3, ValueFromPipeline=$false, HelpMessage="Key type must be one of 'P12' or 'JSON'")]
+    [Alias("K")]
+    [ValidateSet("P12", "JSON")]
+    [String]
+    $KeyType = "P12",
+
+    [Parameter(Mandatory=$false, Position=4, ValueFromPipeline=$false, HelpMessage="Output Path for the key and log e.g. C:\CloudM\GCPConfig")]
     [Alias("O")]
     [String]
     $OutputPath = "C:\CloudM\GCPConfig"
+
+    
 )
 
 $ErrorActionPreference = 'Stop'
@@ -267,7 +278,7 @@ Function Configure-Apis ([string]$LogPath, [string]$ProjectId, [string]$Scope = 
     }
 }
 
-Function Configure-ServiceAccount-Key ([string]$LogPath, [string]$ProjectId, [string]$ServiceAccountId, [string]$OutputPath)
+Function Configure-ServiceAccount-Key ([string]$LogPath, [string]$ProjectId, [string]$ServiceAccountId, [string]$OutputPath, [string]$KeyType)
 {
     $ServiceAccountKeyPath = ""
 
@@ -277,9 +288,11 @@ Function Configure-ServiceAccount-Key ([string]$LogPath, [string]$ProjectId, [st
 
     Try {
 
-        $ServiceAccountKeyPath = "$($OutputPath)\$($ServiceAccountId)_key.p12"
+        $LowerKeyType = $KeyType.ToLower()
 
-        gcloud iam service-accounts keys create $ServiceAccountKeyPath --iam-account=$ServiceAccountEmail --key-file-type=p12 --no-user-output-enabled        
+        $ServiceAccountKeyPath = "$($OutputPath)\$($ServiceAccountId)_key.$($LowerKeyType)"
+
+        gcloud iam service-accounts keys create $ServiceAccountKeyPath --iam-account=$ServiceAccountEmail --key-file-type=$LowerKeyType --no-user-output-enabled        
     }
     catch
     {
@@ -460,7 +473,7 @@ Function Create-OutputPath([string]$OutputPath)
 }
 
 # Entry point for Script
-Function Configure-GCP-For-Migrate ([string]$ProjectId, [string]$ServiceAccountId, [string]$Scope, [string]$OutputPath = "C:\CloudM\GCPConfig")
+Function Configure-GCP-For-Migrate ([string]$ProjectId, [string]$ServiceAccountId, [string]$Scope, [string]$KeyType, [string]$OutputPath = "C:\CloudM\GCPConfig")
 {
     Create-OutputPath $OutputPath
 
@@ -484,7 +497,7 @@ Function Configure-GCP-For-Migrate ([string]$ProjectId, [string]$ServiceAccountI
 
             $ServiceAccountEmail = Get-Service-Account $ProjectId $ServiceAccountId
     
-            $ServiceAccountKeyPath = Configure-ServiceAccount-Key $LogPath $ProjectId $ServiceAccountId $OutputPath
+            $ServiceAccountKeyPath = Configure-ServiceAccount-Key $LogPath $ProjectId $ServiceAccountId $OutputPath $KeyType
 
             # Enable APIs
             Configure-Apis $LogPath $ProjectId $Scope
@@ -525,7 +538,7 @@ Function Configure-GCP-For-Migrate ([string]$ProjectId, [string]$ServiceAccountI
 
             Write-Host ""
             Write-Log $LogPath "Email: $ServiceAccountEmail"
-            Write-Log $LogPath "P12 Key: $ServiceAccountKeyPath"
+            Write-Log $LogPath "$KeyType Key: $ServiceAccountKeyPath"
 
             Write-Host ""
 
@@ -542,4 +555,4 @@ Function Configure-GCP-For-Migrate ([string]$ProjectId, [string]$ServiceAccountI
     }
 }
 
-Configure-GCP-For-Migrate $ProjectId $ServiceAccountId $Scope $OutputPath
+Configure-GCP-For-Migrate $ProjectId $ServiceAccountId $Scope $KeyType $OutputPath
