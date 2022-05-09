@@ -102,7 +102,7 @@ The script outputs the following:
 
 #### Run
 
-    .\GCP_Configuration.ps1 project-id-here service-account-id-here scope-here optional-path-here
+    .\GCP_Configuration.ps1 project-id-here service-account-id-here scope-here key-type-here optional-path-here
 
 ### Output
 
@@ -112,7 +112,7 @@ The script outputs the following:
 
 **Scope** must be one of 'Full', 'SourceLimited', 'DestinationLimited', 'Vault' or 'Storage'
 
-**OutputPath** for P12 key and log e.g. C:\CloudM_GCPConfig
+**OutputPath** for key and log e.g. C:\CloudM_GCPConfig
 
 The script outputs the following:
 
@@ -120,4 +120,4 @@ The script outputs the following:
  - ClientID       
  - Scopes to use      
  - ServiceAccount Email       
- - Path to  ServiceAccount p12 key
+ - Path to ServiceAccount key
