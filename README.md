@@ -12,7 +12,7 @@ PowerShell scripts for configuring Google Workspace and Google Cloud Platform ac
 
 ## GCP_Storage_Configuration
 
-[GCP_Storage_Configuration](Archive/GCP_Storage_Configuration.ps1) GCS storage bucket configuration
+[GCP_Storage_Configuration](Archive/PowerShell/GCP_Storage_Configuration.ps1) GCS storage bucket configuration
 
 ### Running the Script
 
@@ -50,7 +50,7 @@ The script outputs the following:
 
 ## GCP_Vault_Configuration
 
-[GCP_Vault_Configuration](Archive/GCP_Vault_Configuration.ps1) Google Workspace Vault configuration
+[GCP_Vault_Configuration](Archive/PowerShell/GCP_Vault_Configuration.ps1) Google Workspace Vault configuration
 
 ### Running the Script
 
@@ -92,7 +92,7 @@ The script outputs the following:
 
 ## GCP_Configuration
 
-[GCP_Configuration](Migrate/GCP_Configuration.ps1) Google Workspace configuration
+[GCP_Configuration](Migrate/PowerShell/GCP_Configuration.ps1) Google Workspace configuration
 
 ### Running the Script
 
