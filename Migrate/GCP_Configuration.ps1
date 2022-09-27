@@ -106,10 +106,13 @@ Function Install-Dependencies([string]$LogPath)
 
     try {
         # Test to see if gcloud init has been run
-        $CurrentProject = gcloud config get-value project
+        $CurrentProject = gcloud config get project
     }
     catch
     {
+		$ErrorMessage = $_
+		Write-Log $LogPath $ErrorMessage
+		
         Throw "Google Cloud SDK has not been initialised or your account does not have the required permissions"
     }
     
