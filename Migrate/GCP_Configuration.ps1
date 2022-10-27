@@ -434,7 +434,7 @@ Function Configure-Project ([string]$LogPath, [string]$ProjectId)
 
         Write-Log $LogPath "Project: '$ProjectId' Already Exists"
 
-        $CurrentProject = gcloud config get-value project
+        $CurrentProject = gcloud config get project
     
         if ($CurrentProject -ne $ProjectId) {
 
