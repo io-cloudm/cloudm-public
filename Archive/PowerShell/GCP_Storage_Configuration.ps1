@@ -139,7 +139,7 @@ Function Install-Dependencies([string]$LogPath)
 
     try {
         # Test to see if gcloud init has been run
-        $CurrentProject = gcloud config get-value project
+        $CurrentProject = gcloud config get project
     }
     catch
     {
@@ -682,7 +682,7 @@ Function Configure-Project ([string]$LogPath, [string]$ProjectId)
 
         Write-Log $LogPath "Project: '$ProjectId' Already Exists"
 
-        $CurrentProject = gcloud config get-value project
+        $CurrentProject = gcloud config get project
     
         if ($CurrentProject -ne $ProjectId) {
 
