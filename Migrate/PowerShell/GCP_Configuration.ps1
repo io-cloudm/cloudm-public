@@ -207,7 +207,8 @@ Function Build-API-List([string]$Scope = "Standard")
     "calendar-json.googleapis.com",
     "groupsmigration.googleapis.com",
     "tasks.googleapis.com",
-    "people.googleapis.com"
+    "people.googleapis.com",
+    "forms.googleapis.com"
     )
     
     $CloudStorageApis = @(
