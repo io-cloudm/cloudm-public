@@ -39,8 +39,16 @@ function ImportModules() {
     Import-Module MSAL.PS
 }
 
-function CreateConnection($username, $password, $skipMfaLoginError) {
-    Write-Progress "Creating AzureAD Connection"
+function CreateConnection($username, $password, $skipMfaLoginError, $azureEnvironment) {
+    $ae = switch ( $azureEnvironment )
+    {
+        0 { 'AzureCloud' }
+        1 { 'AzureCloud' }
+        2 { 'AzureChinaCloud' }
+        3 { 'AzureUSGovernment' }
+        4 { 'AzureUSGovernment' }
+    }
+    Write-Progress ("Creating AzureAD Connection" + $ae)
     if ($password) {
         Write-Progress "Creating credential from password"
         $credential = CreateCredential -username $username -password $password
@@ -49,11 +57,11 @@ function CreateConnection($username, $password, $skipMfaLoginError) {
     try {
         if ($skipMfaLoginError) {
             Write-Progress "Connecting to AzureAD with Error stop"
-            return Connect-AzureAd -Credential $credential -ErrorAction stop
+            return Connect-AzureAd -Credential $credential -AzureEnvironmentName $ae -ErrorAction stop
         }
         else {
             Write-Progress "Connecting to AzureAD with Error continue"
-            return Connect-AzureAd -Credential $credential
+            return Connect-AzureAd -Credential $credential -AzureEnvironmentName $ae
         }
     }
     catch [Microsoft.Open.Azure.AD.CommonLibrary.AadAuthenticationFailedException] {
@@ -283,7 +291,9 @@ function GetMicrosoftGraphApiPermissions() {
         "913b9306-0ce1-42b8-9137-6a7df690a760",
         "35930dcf-aceb-4bd1-b99a-8ffed403c974",        
         "7ab1d382-f21e-4acd-a863-ba3e13f7da61",
-        "294ce7c9-31ba-490a-ad7d-97a7d075e4ed"
+        "294ce7c9-31ba-490a-ad7d-97a7d075e4ed",
+        "dfb0dd15-61de-45b2-be36-d6a69fba3c79",
+		"44e666d1-d276-445b-a5fc-8815eeb81d55"
     )
 
     return GenerateRequiredResourceAccess -resourceAppId $graphAppId -roles $roles
@@ -359,20 +369,30 @@ function AssignApplicationPermissions($app, $servicePrincipalId) {
     }
 }
 
-function TestConnection($tenantId, $clientId, $username, $certPath, $certPassword) {
+function TestConnection($tenantId, $clientId, $username, $certPath, $certPassword, [int]$azureEnvironment) {
     Write-Host "Testing application connection (this can take up to a few minutes)..." -ForegroundColor DarkGreen
     Start-Sleep -s 15
     $retrycount = 8
     do {
         try {
-            Write-Progress "Generating graph api token"
+            Write-Progress ("Generating graph api token for Azure Environment" + $azureEnvironment)
             $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
             $certificate.Import($certPath, $certPassword, 'DefaultKeySet')
 
-            $MSGraphToken = Get-MsalToken -TenantId $tenantId -Scope 'https://graph.microsoft.com/.default' -ClientId $clientId -ClientCertificate $certificate
+            $graphEndPoint = switch ( $azureEnvironment )
+            {
+                0 { 'https://graph.microsoft.com'    }
+                1 { 'https://graph.microsoft.com'    }
+                2 { 'https://microsoftgraph.chinacloudapi.cn'   }
+                3 { 'https://graph.microsoft.de'   }
+                4 { 'https://graph.microsoft.us'   }
+                5 { 'https://dod-graph.microsoft.us'   }
+            }
+            $scope =  $graphEndPoint + "/.default" 
+            $MSGraphToken = Get-MsalToken -TenantId $tenantId -Scope $scope -ClientId $clientId -ClientCertificate $certificate
             
             Write-Progress "Requesting user from graph api"
-            $url = "https://graph.microsoft.com/v1.0/users/" + $username
+            $url = "$graphEndPoint/v1.0/users/" + $username
             $token = "bearer " + $MSGraphToken.AccessToken
             $response = Invoke-RestMethod -Uri $url -Headers @{'Authorization' = $token; 'User-Agent' = 'CloudMigrator-3.21+'}
 
@@ -405,7 +425,7 @@ function CheckDirectory($path) {
 
     try {
         Write-Progress "Checking if new file can be created in directory"
-        New-Item -Path $path -Name "permissioncheck" -ItemType "file"
+        New-Item -Path $path -Name "permissioncheck" -ItemType "file"  | Out-Null
     } catch {
         throw "User does not have access to directory " + $path
     } finally {
@@ -419,7 +439,7 @@ function CheckDirectory($path) {
     }
 }
 
-function CreateAppRegistration($username, $password, $certFolder, $certName, $certPassword, $userOutput, $skipMfaLoginError, $appName) {
+function CreateAppRegistration($username, $password, $certFolder, $certName, $certPassword, $userOutput, $skipMfaLoginError, $appName, [int]$azureEnvironment = 0) {
     Write-Progress ("Running as " + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
     # Validate directory
     CheckDirectory -path $certFolder
@@ -436,7 +456,7 @@ function CreateAppRegistration($username, $password, $certFolder, $certName, $ce
         Write-Host "Imported Modules" -ForegroundColor DarkGreen
 
         # Connect to AzureAD
-        $connection = CreateConnection -username $username -password $password -skipMfaLoginError $skipMfaLoginError
+        $connection = CreateConnection -username $username -password $password -skipMfaLoginError $skipMfaLoginError -azureEnvironment $azureEnvironment
         Write-Host "Connected" -ForegroundColor DarkGreen
 
         if (!$certName) {
@@ -464,7 +484,7 @@ function CreateAppRegistration($username, $password, $certFolder, $certName, $ce
 
         # Test Application connection
         $certPath = $certFolder + "/" + $certName + ".pfx"
-        $success = TestConnection -tenantId $tenantId -clientId $appId -username $connection.Account.Id -certPath $certPath -certPassword $certPassword
+        $success = TestConnection -tenantId $tenantId -clientId $appId -username $connection.Account.Id -certPath $certPath -certPassword $certPassword -azureEnvironment $azureEnvironment
 
         # Return appid if user friendly output is disabled
         if (!$userOutput) {
@@ -493,8 +513,9 @@ function CreateAppRegistration($username, $password, $certFolder, $certName, $ce
 
 function CreateAzureAppRegistration() {
     $certPassword = Read-Host 'Enter Your Certificate Password:' 
+    $azureEnvironment = Read-Host "Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 PPE`n2 China`n3 US Goverment L4`n4 US Goverment L5`n"
     $location = (Get-Location).ToString()
 
-    CreateAppRegistration -certFolder $location -certPassword $certPassword -userOutput $true
+    CreateAppRegistration -certFolder $location -certPassword $certPassword -userOutput $true -appName $appName -azureEnvironment $azureEnvironment
 }
 CreateAzureAppRegistration
