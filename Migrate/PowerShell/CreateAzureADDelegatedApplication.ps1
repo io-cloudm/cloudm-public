@@ -6,47 +6,41 @@ function ImportModules() {
     # Ensure NuGet is installed
     Write-Progress "Ensuring NuGet is installed"
     Get-PackageProvider -Name "NuGet" -ForceBootstrap
-
-    Write-Progress "Checking if AzureAD module is installed"
-    if (!(Get-Module -ListAvailable -Name AzureAD)) {
-    Write-Progress "Installing AzureAD Module"
-        Write-Host "Installing AzureAD Module..." -ForegroundColor DarkGreen
-        Install-Module AzureAD -Confirm:$false -Force
+   
+    #Install and Import Graph Module
+    Write-Progress "Checking if Microsoft.Graph module is installed"
+    if (!(Get-Module -ListAvailable -Name Microsoft.Graph.Applications)) {
+        Write-Progress "Installing Microsoft.Graph.Applications Module"
+        Write-Host "Installing Microsoft.Graph.Applications Module..." -ForegroundColor DarkGreen
+        Install-Module Microsoft.Graph.Applications -Confirm:$false -Force
     }
-
-    Write-Progress "Importing AzureAD Module"
-    Import-Module AzureAD
+    Write-Progress "Importing Microsoft.Graph.Applications Module"
+    Import-Module Microsoft.Graph.Applications -Scope Global
 }
 
-function CreateConnection($username, $password, $skipMfaLoginError) {
-    Write-Progress "Creating AzureAD Connection"
-    if ($password) {
-        Write-Progress "Creating credential from password"
-        $credential = CreateCredential -username $username -password $password
+function CreateConnection($token, $azureEnvironment) {
+    Write-Host "Connecting to MgGraph using an Access token"
+	$ae = switch ( $azureEnvironment )
+    {
+        0 { 'Global' }
+        1 { 'China' }
+        2 { 'USGov' }
+        3 { 'USGovDoD' }
     }
-    
-    try {
-        if ($skipMfaLoginError) {
-            Write-Progress "Connecting to AzureAD with Error stop"
-            return Connect-AzureAd -Credential $credential -ErrorAction stop
-        }
-        else {
-            Write-Progress "Connecting to AzureAD with Error continue"
-            return Connect-AzureAd -Credential $credential
-        }
-    }
-    catch [Microsoft.Open.Azure.AD.CommonLibrary.AadAuthenticationFailedException] {
-        if ($skipMfaLoginError) {
-            Write-Progress "Re-attempting to connect to AzureAD with manual login"
-            return Connect-AzureAd
-        }
-        throw
-    }
+    Connect-MgGraph -Environment $ae -AccessToken $token -ErrorAction Stop
 }
 
-function CreateCredential($username, $password) {
-    $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-    return New-Object System.Management.Automation.PSCredential -ArgumentList ($username, $securePassword)
+function CreateInteractiveConnection($azureEnvironment){
+	Write-Host "Connecting to MgGraph using an Interactive login"
+	$ae = switch ( $azureEnvironment )
+    {
+        0 { 'Global' }
+        1 { 'China' }
+        2 { 'USGov' }
+        3 { 'USGovDoD' }
+    }
+	$neededScopes = "offline_access openid profile Application.ReadWrite.All Organization.Read.All Directory.Read.All RoleManagement.Read.Directory AppRoleAssignment.ReadWrite.All";
+	Connect-MgGraph -Environment $ae -Scope $neededScopes  -ErrorAction Stop
 }
 
 function CreateApplication($appNameProvided, $redirectUris) {
@@ -57,27 +51,27 @@ function CreateApplication($appNameProvided, $redirectUris) {
     }
     $appHomePageUrl = "https://cloudm.co/"
     $appReplyURLs = @('{0}/api/OfficeExport/callback' -f $redirectUris), ('{0}/api/OfficeImport/callback' -f $redirectUris)
+    $requiredResourceAccess = GenerateDelegatedApplicationApiPermissions
 
     # Check if app has already been installed
     Write-Progress "Checking if app already exists"
-    $requiredResourceAccess = GenerateApplicationApiPermissions
-    if ($app = Get-AzureADApplication -Filter "DisplayName eq '$($appName)'" -ErrorAction SilentlyContinue) {
+    if ($app = 	Get-MgApplication -Filter "DisplayName eq '$($appName)'" -ErrorAction SilentlyContinue) {
         Write-Progress "App already exists"
-        Write-Host "App already exists" -ForegroundColor Yellow
         $appURI = "api://" + $app.AppId
-        Set-AzureADApplication -ObjectId $app.ObjectId -DisplayName $appName -Homepage $appHomePageUrl -IdentifierUris @($appURI) -ReplyUrls $appReplyURLs -RequiredResourceAccess $requiredResourceAccess 
+        Update-MgApplication -ApplicationId $app.Id -DisplayName $appName -Web @{HomePageUrl = $appHomePageUrl} -IdentifierUris @($appURI) -RequiredResourceAccess $requiredResourceAccess
         return $app
     }
-    Write-Progress "Adding new Azure AD application"
-    $app = New-AzureADApplication -DisplayName $appName -Homepage $appHomePageUrl -ReplyUrls $appReplyURLs -RequiredResourceAccess $requiredResourceAccess
+
+    Write-Progress "App does not exist. Adding a new Azure AD application"
+     $app = New-MgApplication -DisplayName $appName -Web @{HomePageUrl = $appHomePageUrl} -RequiredResourceAccess $requiredResourceAccess
     $appURI = "api://" + $app.AppId
-    Set-AzureADApplication -ObjectId $app.ObjectId -IdentifierUri @($appURI)
+    Update-MgApplication -ApplicationId $app.Id -IdentifierUri @($appURI) 
     return $app
 }
 
-function GenerateApplicationApiPermissions() {
-    Write-Progress "Generating application api permissions"
-    $requiredResourceAccess = New-Object System.Collections.Generic.List[Microsoft.Open.AzureAD.Model.RequiredResourceAccess]
+function GenerateDelegatedApplicationApiPermissions() {
+    Write-Progress "Generating Delegated API permissions"
+    $requiredResourceAccess =  New-Object System.Collections.Generic.List[Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess]
 	
     $graphAccess = GetMicrosoftGraphApiPermissions
     $requiredResourceAccess.Add($graphAccess)
@@ -90,51 +84,32 @@ function GetMicrosoftGraphApiPermissions() {
     $scopes = @(
         "9ff7295e-131b-4d94-90e1-69fde507ac11"
     )
-    return GenerateRequiredResourceAccess -resourceAppId $graphAppId -Scopes $scopes 
+    return GenerateRequiredResourceAccess -resourceAppId $graphAppId -roles $scopes 
 }
 
-function GenerateRequiredResourceAccess($resourceAppId, $scopes) {
-    $requiredResourceAccess = New-Object Microsoft.Open.AzureAD.Model.RequiredResourceAccess
+function GenerateRequiredResourceAccess($resourceAppId, $roles) {
+    $requiredResourceAccess = New-Object Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess
     $requiredResourceAccess.ResourceAppId = $resourceAppId
-    $requiredResourceAccess.ResourceAccess = New-Object System.Collections.Generic.List[Microsoft.Open.AzureAD.Model.ResourceAccess]
+    $requiredResourceAccess.ResourceAccess = New-Object System.Collections.Generic.List[Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess]
 
-    #Add scopes
-    foreach ($scope in $scopes) {
-        $resourceAccess = GenerateResourceAccess -resourceId $scope -resourceType "Scope"
-        $requiredResourceAccess.ResourceAccess.Add($resourceAccess)
+    #Add roles
+    foreach ($role in $roles) {
+        $resourceAccess = GenerateResourceAccess -resourceId $role -resourceType "Scope"
+        $requiredResourceAccess.ResourceAccess = $resourceAccess
     }
 
     return $requiredResourceAccess
 }
 
 function GenerateResourceAccess($resourceId, $resourceType) {
-    $resourceAccess = New-Object Microsoft.Open.AzureAD.Model.ResourceAccess
+    $resourceAccess = New-Object Microsoft.Graph.PowerShell.Models.MicrosoftGraphResourceAccess
     $resourceAccess.Type = $resourceType
     $resourceAccess.Id = $resourceId 
     return $resourceAccess
 }
 
-function CreateServicePrincipal($appObjectId, $appId, $accountId) {
-    Write-Progress "Looking for existing service principal"
-    $servicePrincipal = Get-AzureADServicePrincipal -Filter "AppId eq '$($appId)'"
-    if (!$servicePrincipal) {
-        Write-Progress "Adding new service principal"
-        $servicePrincipal = New-AzureADServicePrincipal -AppId $appId
-    }
-		
-    Write-Progress "Getting application owner"
-    $owner = Get-AzureADApplicationOwner -ObjectId $appObjectId -ErrorAction SilentlyContinue
-    if (!$owner) {
-        Write-Progress "Getting azure AD user"
-        $admin = Get-AzureADUser -ObjectId $accountId
-        Write-Progress "Adding application owner"
-        Add-AzureADApplicationOwner -ObjectId $appObjectId -RefObjectId $admin.ObjectId  
-    }
-	
-    return $servicePrincipal.ObjectId
-}
 
-function CreateAppDelegatedRegistration($username, $password, $userOutput, $skipMfaLoginError, $appName, $redirectUris) {
+function CreateAppDelegatedRegistration($token, $userOutput, $appName, $redirectUris, $useInteractiveLogin, $azureEnvironment) {
     Write-Progress ("Running as " + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
     $dateFormat = (Get-Culture).DateTimeFormat.ShortDatePattern
     $certEndDate = ([DateTime]::Now).AddYears(5).ToString($dateFormat)
@@ -144,60 +119,80 @@ function CreateAppDelegatedRegistration($username, $password, $userOutput, $skip
     }
     try {
         # Import/Install required modules
-        ImportModules
         Write-Host "Imported Modules" -ForegroundColor DarkGreen
+        ImportModules
+        Write-Host "Modules imported" -ForegroundColor DarkGreen
 
-        # Connect to AzureAD
-        $connection = CreateConnection -username $username -password $password -skipMfaLoginError $skipMfaLoginError
-        Write-Host "Connected" -ForegroundColor DarkGreen
+        if($useInteractiveLogin -eq 0)
+		{
+			CreateInteractiveConnection -azureEnvironment $azureEnvironment
+		}
+		else
+		{
+			 CreateConnection -token $token  -azureEnvironment $azureEnvironment
+		}
+        Write-Host "Connectedn to Microsoft Graph" -ForegroundColor DarkGreen
 
         # Create Application
         $app = CreateApplication $appName -redirectUris $redirectUris
-        $appObjectId = $app.ObjectId
-        $appId = $app.AppId
-        Write-Host "Registered app" $appId -ForegroundColor DarkGreen
-        if($app.PasswordCredentials.Count -eq 0){
-            $appsecret = New-AzureADApplicationPasswordCredential -ObjectId $appObjectId -CustomKeyIdentifier "Migrate" -StartDate $startDate -EndDate $endDate
-            Write-Host "Application Password created" -ForegroundColor DarkGreen
-        } else{
+        $appClientId = $app.AppId
+        $appId = $app.Id
+        Write-Host "App created successfully app" $appId -ForegroundColor DarkGreen
+
+        $passwordCred = @{
+           displayName = 'CloudM Secret'
+           endDateTime = (Get-Date).AddMonths(6)
+        }
+     
+
+       if($app.passwordcredentials.count -eq 0){
+              $appsecret = Add-MgApplicationPassword -applicationId $appId -PasswordCredential $passwordCred
+              write-host "Application password created" -foregroundcolor darkgreen
+       }
+       else
+       #Client Secret already exists. We need to delete it and generate a new one.
+       {
             foreach($key in $app.PasswordCredentials){
-                Remove-AzureADApplicationPasswordCredential -ObjectId $appObjectId -KeyId $key.KeyId
-                Write-Host "Removing Application Password" -ForegroundColor DarkGreen
+                Remove-MgApplicationPassword -ApplicationId $appId -KeyId $key.KeyId
+                Write-Host "Application password removed successfully" -ForegroundColor DarkGreen
             }
-            $appsecret = New-AzureADApplicationPasswordCredential -ObjectId $appObjectId -CustomKeyIdentifier "Migrate" -StartDate $startDate -EndDate $endDate
-            Write-Host "Application Password created" -ForegroundColor DarkGreen
-        }
-        # Create Service principal
-        CreateServicePrincipal -appId $appId -appObjectId $appObjectId -accountId $connection.Account.Id
-        Write-Host "Service principal created" -ForegroundColor DarkGreen
-
-        # Return appid if user friendly output is disabled
-        if (!$userOutput) {
-            return $appId + "|" + $appsecret.Value
-        }
-
-        # Display user friendly output
-        $nl = [Environment]::NewLine
-        $output = ($nl + $nl + "Delegated Permissions Client ID: " + $appId)
-        $output += ($nl + "Delegated Permissions Client ID Secret: " + $appsecret.Value)
-
-        $output = $nl + $nl +"Azure AD Delegated application successfully registered." + $output
-        Write-Host $output -ForegroundColor Green
+            $appsecret = Add-MgApplicationPassword -applicationId $appId -PasswordCredential $passwordCred
+            write-host "Application password created" -foregroundcolor darkgreen
+       }
+        
+       if (!$userOutput) {
+            return $appClientId + "|" + $appsecret.SecretText
+       }
+       # Display user friendly output
+       $nl = [Environment]::NewLine
+       $output = ($nl + $nl + "Client ID: " + $appClientId)
+       $output += ($nl + "App Password: " + $appsecret.SecretText)
+       
+       $output = $nl + $nl +"Azure AD application successfully registered." + $output
+       Write-Host $output -ForegroundColor Green
     }
     catch [Microsoft.Open.Azure.AD.CommonLibrary.AadAuthenticationFailedException] {
         throw
     }
 }
 
-function CreateAzureAppRegistration {
- Param(
- [Parameter(Mandatory = $true, HelpMessage="Enter Your (HHTPS) Redirect Uri. Examples: CloudM Self Hosted https//:cloudm.local. CloudM Hosted CloudM Hosted https://migrate.cloudm.io:")]
- [ValidatePattern('^(www\.|https:\/\/)?[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$')]
- [string] $redirectUris
- )
-    $location = (Get-Location).ToString()
-
-    CreateAppDelegatedRegistration -certFolder $location -certPassword $certPassword -userOutput $true -redirectUris $redirectUris
+#This function is for debug purposes only. It is not called in Production.
+function CreateAzureAppRegistration() {
+    #To generate the token for Debug purposes, In PS, run Connect-MgGraph -UseDeviceAuthentication and follow its instructions. 
+    #In parallel, open a fiddler trace to find the Token from the network trace.
+	
+	$appName = Read-Host 'Enter the application Name'
+	$azureEnvironment = Read-Host "Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
+	Write-Host 'Do you want to login to Graph interactively (recommended if you are running the script manually) or with a Graph token?'; 
+	$interactiveLogin = Read-Host 'Type 0 for interactive login, 1 for a login with a Graph Token'
+	$token = '';
+	if($interactiveLogin -eq 1){
+		$token = Read-Host 'Please enter the Graph Token'
+	}
+	else{
+		Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
+	}
+    CreateAppDelegatedRegistration -token $token -userOutput $false -skipMfaLoginError $false -appName $appName -redirectUris "https://www.google.com" -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment
 }
 
 CreateAzureAppRegistration
