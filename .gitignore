@@ -48,3 +48,8 @@ Thumbs.db
 *.mov
 *.wmv
 
+/.vs/cloudm-public/FileContentIndex/b8d55698-ad16-42cf-bbd8-2dc2f9d2eb2e.vsidx
+*.vsidx
+*.lock
+*.wsuo
+*.sqlite
