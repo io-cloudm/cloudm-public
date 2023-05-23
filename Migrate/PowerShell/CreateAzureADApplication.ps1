@@ -1,6 +1,4 @@
 ﻿#Requires -RunAsAdministrator
-$MaximumFunctionCount = 8192
-
 
 function ImportModules() {
     Write-Progress "Importing modules"

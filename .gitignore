@@ -53,3 +53,4 @@ Thumbs.db
 *.lock
 *.wsuo
 *.sqlite
+/.vs/VSWorkspaceState.json
