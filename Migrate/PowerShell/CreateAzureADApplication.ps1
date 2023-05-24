@@ -441,6 +441,10 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         $servicePrincipalId = GetOrCreateServicePrincipal  -appId $appId 
         Write-Host "Service principal created" -ForegroundColor DarkGreen
 
+        #Assign exchange online admin roll
+        ApplyExchangeAdminRoll -servicePrincipalId $servicePrincipalId
+        Write-Progress "Exchange admin roll applied"
+
         # ---------------------  GRANT ADMIN CONSENT ---------------------------------
 
         #Get the Permission ServicePrincipalId for Graph
@@ -485,6 +489,20 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
     }
     catch{
         throw
+    }
+}
+
+function ApplyExchangeAdminRoll($servicePrincipalId) {
+    Write-Progress "Applying exchange admin roll to application"
+    try {
+      $id = Get-MgServicePrincipalMemberOf -ServicePrincipalId $servicePrincipalId -ErrorAction SilentlyContinue
+      if(!$id) {
+        #Exchange Administrator
+        $directoryRoleId = (Get-MgDirectoryRole -Filter "RoleTemplateId eq '29232cdf-9323-42fd-ade2-1d097af3e4de'").Id
+        New-MgDirectoryRoleMemberByRef -DirectoryRoleId $directoryRoleId -AdditionalProperties @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$servicePrincipalId" }
+      }
+    } catch {
+      Write-Host "Exchange admin already applied" -ForegroundColor Yellow
     }
 }
 
