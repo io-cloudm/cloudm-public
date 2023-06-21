@@ -45,25 +45,28 @@ function CreateInteractiveConnection($azureEnvironment){
 
 function CreateApplication($appNameProvided, $redirectUris) {
     $appName = "CloudM Migrate Delegated"
-    
     if (-not ([string]::IsNullOrWhiteSpace($appNameProvided))){
-      $appName = $appNameProvided
+        $appName = $appNameProvided
     }
-    $appHomePageUrl = "https://cloudm.co/"
-    $appReplyURLs = @('{0}/api/OfficeExport/callback' -f $redirectUris), ('{0}/api/OfficeImport/callback' -f $redirectUris)
+    $appHomePageUrl = "https://cloudm.io/"
     $requiredResourceAccess = GenerateDelegatedApplicationApiPermissions
-
-    # Check if app has already been installed
+    $alwaysOnUI = New-Object -TypeName Microsoft.Graph.PowerShell.Models.MicrosoftGraphApplication
+    $alwaysOnUI.DisplayName = $appName
+    $alwaysOnUI.Web.RedirectUris =  @('{0}/api/OfficeExport/callback' -f $redirectUris), ('{0}/api/OfficeImport/callback' -f $redirectUris)
+    $alwaysOnUI.Web.HomePageUrl = $appHomePageUrl
+    $alwaysOnUI.RequiredResourceAccess = $requiredResourceAccess
+    
     Write-Progress "Checking if app already exists"
     if ($app = 	Get-MgApplication -Filter "DisplayName eq '$($appName)'" -ErrorAction SilentlyContinue) {
         Write-Progress "App already exists"
+        Write-Host "App already exists" -ForegroundColor Yellow
         $appURI = "api://" + $app.AppId
-        Update-MgApplication -ApplicationId $app.Id -DisplayName $appName -Web @{HomePageUrl = $appHomePageUrl} -IdentifierUris @($appURI) -RequiredResourceAccess $requiredResourceAccess
+        $alwaysOnUI.IdentifierUris = $appURI
+        Update-MgApplication -ApplicationId $app.Id -BodyParameter $alwaysOnUI
         return $app
     }
-
-    Write-Progress "App does not exist. Adding a new Azure AD application"
-     $app = New-MgApplication -DisplayName $appName -Web @{HomePageUrl = $appHomePageUrl} -RequiredResourceAccess $requiredResourceAccess
+    Write-Progress "Adding new Azure AD application"
+    $app = New-MgApplication -BodyParameter $alwaysOnUI
     $appURI = "api://" + $app.AppId
     Update-MgApplication -ApplicationId $app.Id -IdentifierUri @($appURI) 
     return $app
@@ -124,13 +127,13 @@ function CreateAppDelegatedRegistration($token, $userOutput, $appName, $redirect
         Write-Host "Modules imported" -ForegroundColor DarkGreen
 
         if($useInteractiveLogin -eq 0)
-		{
-			CreateInteractiveConnection -azureEnvironment $azureEnvironment
-		}
-		else
-		{
-			 CreateConnection -token $token  -azureEnvironment $azureEnvironment
-		}
+        {
+            CreateInteractiveConnection -azureEnvironment $azureEnvironment
+        }
+        else
+        {
+            CreateConnection -token $token  -azureEnvironment $azureEnvironment
+        }
         Write-Host "Connectedn to Microsoft Graph" -ForegroundColor DarkGreen
 
         # Create Application
@@ -176,11 +179,8 @@ function CreateAppDelegatedRegistration($token, $userOutput, $appName, $redirect
     }
 }
 
-#This function is for debug purposes only. It is not called in Production.
+
 function CreateAzureAppRegistration() {
-    #To generate the token for Debug purposes, In PS, run Connect-MgGraph -UseDeviceAuthentication and follow its instructions. 
-    #In parallel, open a fiddler trace to find the Token from the network trace.
-	
 	$appName = Read-Host 'Enter the application Name'
 	$azureEnvironment = Read-Host "Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
 	Write-Host 'Do you want to login to Graph interactively (recommended if you are running the script manually) or with a Graph token?'; 
@@ -192,7 +192,7 @@ function CreateAzureAppRegistration() {
 	else{
 		Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
 	}
-    CreateAppDelegatedRegistration -token $token -userOutput $false -skipMfaLoginError $false -appName $appName -redirectUris "https://www.google.com" -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment
+    CreateAppDelegatedRegistration -token $token -userOutput $false -skipMfaLoginError $false -appName $appName -redirectUris "https://cloudm.local" -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment
 }
 
 CreateAzureAppRegistration

@@ -49,25 +49,31 @@ function CreateApplication($appNameProvided) {
   if(!$appNameProvided){
     $appName = "CloudM Migrate"
   } 
-    
-    $appHomePageUrl = "https://cloudm.co/"
-    $appReplyURLs = @($appHomePageURL, "https://localhost")
-
+  
+    $appHomePageUrl = "https://cloudm.io/"
     $requiredResourceAccess = GenerateApplicationApiPermissions
-
+    $alwaysOnUI = New-Object -TypeName Microsoft.Graph.PowerShell.Models.MicrosoftGraphApplication
+    $alwaysOnUI.DisplayName = $appName
+    $alwaysOnUI.Web.HomePageUrl = $appHomePageUrl
+    $alwaysOnUI.RequiredResourceAccess = $requiredResourceAccess
+    $alwaysOnUI.SignInAudience = "AzureADMyOrg"
+    $alwaysOnUI.Info.PrivacyStatementUrl = "https://www.cloudm.io/legal/privacy-policy"
+    $alwaysOnUI.Info.TermsOfServiceUrl = "https://www.cloudm.io/legal/terms-conditions"
+    $alwaysOnUI.RequiredResourceAccess = $requiredResourceAccess
     # Check if app has already been installed
     Write-Progress "Checking if app already exists"
     if ($app = 	Get-MgApplication -Filter "DisplayName eq '$($appName)'" -ErrorAction SilentlyContinue) {
         Write-Progress "App already exists"
         Write-Host "App already exists" -ForegroundColor Yellow
         $appURI = "api://" + $app.AppId
-        Update-MgApplication -ApplicationId $app.Id -DisplayName $appName -Web @{HomePageUrl = $appHomePageUrl} -IdentifierUris @($appURI) -RequiredResourceAccess $requiredResourceAccess
+        $alwaysOnUI.IdentifierUris = $appURI
+        Update-MgApplication -ApplicationId $app.Id -BodyParameter $alwaysOnUI
         return $app
     }
     Write-Progress "Adding new Azure AD application"
-    $app = New-MgApplication -DisplayName $appName -Web @{HomePageUrl = $appHomePageUrl} -RequiredResourceAccess $requiredResourceAccess
+    $app = New-MgApplication -BodyParameter $alwaysOnUI
     $appURI = "api://" + $app.AppId
-    Update-MgApplication -ApplicationId $app.Id -IdentifierUri @($appURI) 
+    Update-MgApplication -ApplicationId $app.Id -IdentifierUri @($appURI)
     return $app
 }
 
@@ -132,7 +138,8 @@ function GetMicrosoftGraphPermissionsRoles() {
         "35930dcf-aceb-4bd1-b99a-8ffed403c974",        
         "7ab1d382-f21e-4acd-a863-ba3e13f7da61",
         "294ce7c9-31ba-490a-ad7d-97a7d075e4ed",
-        "dfb0dd15-61de-45b2-be36-d6a69fba3c79"
+        "dfb0dd15-61de-45b2-be36-d6a69fba3c79",
+        "44e666d1-d276-445b-a5fc-8815eeb81d55"
     )
     return $roles
 }
@@ -439,6 +446,10 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         $servicePrincipalId = GetOrCreateServicePrincipal  -appId $appId 
         Write-Host "Service principal created" -ForegroundColor DarkGreen
 
+        #Assign exchange online admin roll
+        applyExchangeAdminRoll -servicePrincipalId $servicePrincipalId
+        Write-Progress "Exchange admin roll applied"
+
         # ---------------------  GRANT ADMIN CONSENT ---------------------------------
 
         #Get the Permission ServicePrincipalId for Graph
@@ -483,6 +494,20 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
     }
     catch{
         throw
+    }
+}
+
+function ApplyExchangeAdminRoll($servicePrincipalId) {
+    Write-Progress "Applying exchange admin roll to application"
+    try {
+      $id = Get-MgServicePrincipalMemberOf -ServicePrincipalId $servicePrincipalId -ErrorAction SilentlyContinue
+      if(!$id) {
+        #Exchange Administrator
+        $directoryRoleId = (Get-MgDirectoryRole -Filter "RoleTemplateId eq '29232cdf-9323-42fd-ade2-1d097af3e4de'").Id
+        New-MgDirectoryRoleMemberByRef -DirectoryRoleId $directoryRoleId -AdditionalProperties @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$servicePrincipalId" }
+      }
+    } catch {
+      Write-Host "Exchange admin already applied" -ForegroundColor Yellow
     }
 }
 
