@@ -134,13 +134,13 @@ function CreateAppDelegatedRegistration($token, $userOutput, $appName, $redirect
         {
             CreateConnection -token $token  -azureEnvironment $azureEnvironment
         }
-        Write-Host "Connectedn to Microsoft Graph" -ForegroundColor DarkGreen
+        Write-Host "Connected to Microsoft Graph" -ForegroundColor DarkGreen
 
         # Create Application
         $app = CreateApplication $appName -redirectUris $redirectUris
         $appClientId = $app.AppId
         $appId = $app.Id
-        Write-Host "App created successfully app" $appId -ForegroundColor DarkGreen
+        Write-Host "App created successfully" -ForegroundColor DarkGreen
 
         $passwordCred = @{
            displayName = 'CloudM Secret'
@@ -160,7 +160,7 @@ function CreateAppDelegatedRegistration($token, $userOutput, $appName, $redirect
                 Write-Host "Application password removed successfully" -ForegroundColor DarkGreen
             }
             $appsecret = Add-MgApplicationPassword -applicationId $appId -PasswordCredential $passwordCred
-            write-host "Application password created" -foregroundcolor darkgreen
+            write-host "Application password created: " $appsecret -foregroundcolor darkgreen
        }
         
        if (!$userOutput) {
@@ -168,8 +168,8 @@ function CreateAppDelegatedRegistration($token, $userOutput, $appName, $redirect
        }
        # Display user friendly output
        $nl = [Environment]::NewLine
-       $output = ($nl + $nl + "Client ID: " + $appClientId)
-       $output += ($nl + "App Password: " + $appsecret.SecretText)
+       $output = ($nl + $nl + "Delegated Permissions Client ID: " + $appClientId)
+       $output += ($nl + "Delegated Permissions Client Secret: " + $appsecret.SecretText)
        
        $output = $nl + $nl +"Azure AD application successfully registered." + $output
        Write-Host $output -ForegroundColor Green
@@ -192,7 +192,7 @@ function CreateAzureAppRegistration() {
 	else{
 		Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
 	}
-    CreateAppDelegatedRegistration -token $token -userOutput $false -skipMfaLoginError $false -appName $appName -redirectUris "https://cloudm.local" -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment
+    CreateAppDelegatedRegistration -token $token -userOutput $true -appName $appName -redirectUris "https://cloudm.local" -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment
 }
 
 CreateAzureAppRegistration

@@ -514,7 +514,7 @@ function ApplyExchangeAdminRoll($servicePrincipalId) {
 #This function is used to be run manually, for debug purposes. It is not called in this script
 function CreateAzureAppRegistration() {
     $certPassword = Read-Host 'Enter Your Certificate Password:' 
-    $location = Read-Host 'Enter the Location'
+    $location = Read-Host 'Enter the file location to save certificate:'
     $appName = Read-Host 'Enter the application Name'
 	$azureEnvironment = Read-Host "Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
 	Write-Host 'Do you want to login to Graph interactively (recommended if you are running the script manually) or with a Graph token?'; 
