@@ -55,7 +55,11 @@ function CreateApplication($appNameProvided, $redirectUris) {
     $alwaysOnUI.Web.RedirectUris =  @('{0}/api/OfficeExport/callback' -f $redirectUris), ('{0}/api/OfficeImport/callback' -f $redirectUris)
     $alwaysOnUI.Web.HomePageUrl = $appHomePageUrl
     $alwaysOnUI.RequiredResourceAccess = $requiredResourceAccess
-    
+    $alwaysOnUI.SignInAudience = "AzureADMyOrg"
+    $alwaysOnUI.Info.PrivacyStatementUrl = "https://www.cloudm.io/legal/privacy-policy"
+    $alwaysOnUI.Info.TermsOfServiceUrl = "https://www.cloudm.io/legal/terms-conditions"
+    $alwaysOnUI.RequiredResourceAccess = $requiredResourceAccess
+    # Check if app has already been installed
     Write-Progress "Checking if app already exists"
     if ($app = 	Get-MgApplication -Filter "DisplayName eq '$($appName)'" -ErrorAction SilentlyContinue) {
         Write-Progress "App already exists"
