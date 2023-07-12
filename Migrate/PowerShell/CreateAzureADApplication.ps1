@@ -11,9 +11,7 @@ function ImportModules() {
     if (!(Get-Module -ListAvailable -Name Microsoft.Graph.Applications))
     {
         Write-Progress "Microsoft.Graph module is not installed."
-        Write-Progress "Installing Microsoft.Graph.Applications Module"
-        Write-Host "Installing Microsoft.Graph.Applications Module..." -ForegroundColor DarkGreen
-        Install-Module Microsoft.Graph.Applications -Confirm:$false -Force
+        Write-Host "Installing Microsoft.Graph.Applications Module with version 2.0.0" -ForegroundColor DarkGreen
         Install-Module Microsoft.Graph.Applications -RequiredVersion 2.0.0 -Confirm:$false -Force
         Write-Progress "Microsoft.Graph.Applications Module installed successfully."
     }
@@ -29,7 +27,6 @@ function ImportModules() {
       if(!($stringVersion -eq '2.0.0'))
       {
           Write-Host "Module version is different from 2.0.0. Installing the 2.0.0 version"
-          Write-Host "Installing Microsoft.Graph.Applications 2.0.0 Module..." -ForegroundColor DarkGreen
           Install-Module Microsoft.Graph.Applications -RequiredVersion 2.0.0 -Confirm:$false -Force
           Write-Host "Microsoft.Graph.Applications Module installed successfully."
       }

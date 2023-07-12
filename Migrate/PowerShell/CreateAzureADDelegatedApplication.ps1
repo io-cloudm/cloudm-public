@@ -11,10 +11,8 @@ function ImportModules() {
     Write-Progress "Checking if Microsoft.Graph module is installed"
     if (!(Get-Module -ListAvailable -Name Microsoft.Graph.Applications))
     {
-        Write-Progress "Microsoft.Graph module is not installed."
-        Write-Progress "Installing Microsoft.Graph.Applications Module"
+        Write-Progress "Microsoft.Graph module is NOT installed."
         Write-Host "Installing Microsoft.Graph.Applications Module..." -ForegroundColor DarkGreen
-        Install-Module Microsoft.Graph.Applications -Confirm:$false -Force
         Install-Module Microsoft.Graph.Applications -RequiredVersion 2.0.0 -Confirm:$false -Force
         Write-Progress "Microsoft.Graph.Applications Module installed successfully."
     }
