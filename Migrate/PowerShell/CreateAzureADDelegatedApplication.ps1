@@ -9,12 +9,37 @@ function ImportModules() {
    
     #Install and Import Graph Module
     Write-Progress "Checking if Microsoft.Graph module is installed"
-    if (!(Get-Module -ListAvailable -Name Microsoft.Graph.Applications)) {
+    if (!(Get-Module -ListAvailable -Name Microsoft.Graph.Applications))
+    {
+        Write-Progress "Microsoft.Graph module is not installed."
         Write-Progress "Installing Microsoft.Graph.Applications Module"
         Write-Host "Installing Microsoft.Graph.Applications Module..." -ForegroundColor DarkGreen
         Install-Module Microsoft.Graph.Applications -Confirm:$false -Force
+        Install-Module Microsoft.Graph.Applications -RequiredVersion 2.0.0 -Confirm:$false -Force
+        Write-Progress "Microsoft.Graph.Applications Module installed successfully."
     }
-    Write-Progress "Importing Microsoft.Graph.Applications Module"
+    else
+    {
+      
+      #Check the version. We need Version 2.0.0 to be installed. If any other version (newer or older) is installed, we need to reinstall 2.0.0 
+      #(No need to delete, a reinstall will upgrade to 2.0.0)
+      #This is related to issue CMT-6388
+      $stringVersion = (Get-InstalledModule Microsoft.Graph.Applications).Version.ToString()
+      Write-Progress "Microsoft.Graph module is already installed with the version " 
+      Write-Progress $stringVersion
+      if(!($stringVersion -eq '2.0.0'))
+      {
+          Write-Host "Module version is different from 2.0.0. Installing the 2.0.0 version"
+          Write-Host "Installing Microsoft.Graph.Applications 2.0.0 Module..." -ForegroundColor DarkGreen
+          Install-Module Microsoft.Graph.Applications -RequiredVersion 2.0.0 -Confirm:$false -Force
+          Write-Host "Microsoft.Graph.Applications Module installed successfully."
+      }
+      else
+      {
+          Write-Progress "Microsoft.Graph.Applications Module Version 2.0.0 is already installed."
+      }
+    }
+    Write-Host "Importing Microsoft.Graph.Applications Module"
     Import-Module Microsoft.Graph.Applications -Scope Global
 }
 
@@ -27,7 +52,8 @@ function CreateConnection($token, $azureEnvironment) {
         2 { 'USGov' }
         3 { 'USGovDoD' }
     }
-    Connect-MgGraph -Environment $ae -AccessToken $token -ErrorAction Stop
+    $secureToken = ConvertTo-SecureString $token -AsPlainText -Force
+    Connect-MgGraph -Environment $ae -AccessToken $secureToken -ErrorAction Stop
 }
 
 function CreateInteractiveConnection($azureEnvironment){
