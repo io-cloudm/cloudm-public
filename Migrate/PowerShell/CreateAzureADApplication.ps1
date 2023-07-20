@@ -1,24 +1,44 @@
 ﻿#Requires -RunAsAdministrator
 
-function ImportModules() {
+function ImportModules($moduleName) {
     Write-Progress "Importing modules"
-
-    # Ensure NuGet is installed
-    Write-Progress "Ensuring NuGet is installed"
-    Get-PackageProvider -Name "NuGet" -ForceBootstrap
-
-   
     #Install and Import Graph Module
-    Write-Progress "Checking if Microsoft.Graph module is installed"
-    if (!(Get-Module -ListAvailable -Name Microsoft.Graph.Applications)) {
-        Write-Progress "Installing Microsoft.Graph.Applications Module"
-        Write-Host "Installing Microsoft.Graph.Applications Module..." -ForegroundColor DarkGreen
-        Install-Module Microsoft.Graph.Applications -Confirm:$false -Force
+    Write-Progress "Checking if $moduleName is installed"
+    if (!(Get-Module -ListAvailable -Name $moduleName)) 
+    {
+        Write-Progress "Microsoft.Graph module is not installed."
+        Write-Progress "Installing $moduleName Module"
+        Write-Host "Installing $moduleName Module..." -ForegroundColor DarkGreen
+        Install-Module $moduleName -RequiredVersion 2.0.0 -Confirm:$false -Force
+        Write-Progress "$moduleName Module installed successfully."
+
     }
-    Write-Progress "Importing Microsoft.Graph.Applications Module"
-    Import-Module Microsoft.Graph.Applications -Scope Global
-}
- 
+    else
+    {
+      
+      #Check the version. We need Version 2.0.0 to be installed. If any other version (newer or older) is installed, we need to reinstall 2.0.0 
+      #(No need to delete, a reinstall will upgrade to 2.0.0)
+      #This is related to issue CMT-6388
+      $stringVersion = (Get-InstalledModule $moduleName).Version.ToString()
+      Write-Progress "$moduleName module is already installed with the version " 
+      Write-Progress $stringVersion
+
+      if(!($stringVersion -eq '2.0.0'))
+      {
+          Write-Host "Module version is different from 2.0.0. Installing the 2.0.0 version"
+          Write-Host "Installing $moduleName 2.0.0 Module..." -ForegroundColor DarkGreen
+          Install-Module $moduleName -RequiredVersion 2.0.0 -Confirm:$false -Force
+          Write-Host "$moduleName Module installed successfully."
+      }
+      else
+      {
+          Write-Progress "$moduleName Module Version 2.0.0 is already installed."
+      }
+    }
+    Write-Host "Importing $moduleName Module"
+
+    Import-Module $moduleName -Scope Global -RequiredVersion 2.0.0
+} 
 
 function CreateConnection($token, $azureEnvironment) {
     Write-Host "Connecting to MgGraph using an Access token"
@@ -41,7 +61,7 @@ function CreateInteractiveConnection($azureEnvironment){
         2 { 'USGov' }
         3 { 'USGovDoD' }
     }
-	$neededScopes = "offline_access openid profile Application.ReadWrite.All Organization.Read.All Directory.Read.All RoleManagement.Read.Directory AppRoleAssignment.ReadWrite.All";
+	$neededScopes = "offline_access openid profile Application.ReadWrite.All Organization.Read.All Directory.Read.All RoleManagement.Read.Directory AppRoleAssignment.ReadWrite.All RoleManagement.ReadWrite.Directory";
 	Connect-MgGraph -Environment $ae -Scope $neededScopes  -ErrorAction Stop
 }
 
@@ -384,7 +404,7 @@ function GrantAppRoleAssignmentToServicePrincipal($appServicePrincipalId, $permi
     foreach ($roleId in $roles) {
         try
         {
-            New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $appServicePrincipalId -PrincipalId  $appServicePrincipalId -ResourceId $permissionServicePrincipalId -AppRoleId $roleId -ErrorAction "stop"
+            New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $appServicePrincipalId -PrincipalId  $appServicePrincipalId -ResourceId $permissionServicePrincipalId -AppRoleId $roleId -ErrorAction "stop" | Out-Null
         }
         catch
         {
@@ -405,18 +425,23 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
      try {
 
         # Import/Install required modules
-        Write-Host "Imported Modules" -ForegroundColor DarkGreen
-        ImportModules
+        Write-Host "Import Modules" -ForegroundColor DarkGreen
+        # Ensure NuGet is installed
+        Write-Progress "Ensuring NuGet is installed"
+        Get-PackageProvider -Name "NuGet" -ForceBootstrap | Out-Null
+        ImportModules -moduleName Microsoft.Graph.Identity.DirectoryManagement
+        ImportModules -moduleName Microsoft.Graph.Applications
+
         Write-Host "Modules imported" -ForegroundColor DarkGreen
 
         # Connect to Mg-Graph using a pre-generated access token
 		if($useInteractiveLogin -eq 0)
 		{
-			CreateInteractiveConnection -azureEnvironment $azureEnvironment
+            CreateInteractiveConnection -azureEnvironment $azureEnvironment
 		}
 		else
 		{
-			 CreateConnection -token $token  -azureEnvironment $azureEnvironment
+            CreateConnection -token $token  -azureEnvironment $azureEnvironment
 		}
        
         Write-Host "Connected" -ForegroundColor DarkGreen
@@ -447,7 +472,7 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         Write-Host "Service principal created" -ForegroundColor DarkGreen
 
         #Assign exchange online admin roll
-        applyExchangeAdminRoll -servicePrincipalId $servicePrincipalId
+        ApplyExchangeAdminRole -servicePrincipalId $servicePrincipalId
         Write-Progress "Exchange admin roll applied"
 
         # ---------------------  GRANT ADMIN CONSENT ---------------------------------
@@ -497,14 +522,14 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
     }
 }
 
-function ApplyExchangeAdminRoll($servicePrincipalId) {
+function ApplyExchangeAdminRole($servicePrincipalId) {
     Write-Progress "Applying exchange admin roll to application"
     try {
       $id = Get-MgServicePrincipalMemberOf -ServicePrincipalId $servicePrincipalId -ErrorAction SilentlyContinue
       if(!$id) {
         #Exchange Administrator
-        $directoryRoleId = (Get-MgDirectoryRole -Filter "RoleTemplateId eq '29232cdf-9323-42fd-ade2-1d097af3e4de'").Id
-        New-MgDirectoryRoleMemberByRef -DirectoryRoleId $directoryRoleId -AdditionalProperties @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$servicePrincipalId" }
+        $directoryRoleId = (Get-MgDirectoryRole -Filter "RoleTemplateId eq '29232cdf-9323-42fd-ade2-1d097af3e4de'").Id 
+        New-MgDirectoryRoleMemberByRef -DirectoryRoleId $directoryRoleId  -OdataId "https://graph.microsoft.com/v1.0/directoryObjects/$servicePrincipalId"
       }
     } catch {
       Write-Host "Exchange admin already applied" -ForegroundColor Yellow

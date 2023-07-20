@@ -1,21 +1,43 @@
 ﻿#Requires -RunAsAdministrator
 
-function ImportModules() {
+function ImportModules($moduleName) {
     Write-Progress "Importing modules"
-
-    # Ensure NuGet is installed
-    Write-Progress "Ensuring NuGet is installed"
-    Get-PackageProvider -Name "NuGet" -ForceBootstrap
-   
     #Install and Import Graph Module
-    Write-Progress "Checking if Microsoft.Graph module is installed"
-    if (!(Get-Module -ListAvailable -Name Microsoft.Graph.Applications)) {
-        Write-Progress "Installing Microsoft.Graph.Applications Module"
-        Write-Host "Installing Microsoft.Graph.Applications Module..." -ForegroundColor DarkGreen
-        Install-Module Microsoft.Graph.Applications -Confirm:$false -Force
+    Write-Progress "Checking if $moduleName is installed"
+    if (!(Get-Module -ListAvailable -Name $moduleName)) 
+    {
+        Write-Progress "Microsoft.Graph module is not installed."
+        Write-Progress "Installing $moduleName Module"
+        Write-Host "Installing $moduleName Module..." -ForegroundColor DarkGreen
+        Install-Module $moduleName -RequiredVersion 2.0.0 -Confirm:$false -Force
+        Write-Progress "$moduleName Module installed successfully."
+
     }
-    Write-Progress "Importing Microsoft.Graph.Applications Module"
-    Import-Module Microsoft.Graph.Applications -Scope Global
+    else
+    {
+      
+      #Check the version. We need Version 2.0.0 to be installed. If any other version (newer or older) is installed, we need to reinstall 2.0.0 
+      #(No need to delete, a reinstall will upgrade to 2.0.0)
+      #This is related to issue CMT-6388
+      $stringVersion = (Get-InstalledModule $moduleName).Version.ToString()
+      Write-Progress "$moduleName module is already installed with the version " 
+      Write-Progress $stringVersion
+
+      if(!($stringVersion -eq '2.0.0'))
+      {
+          Write-Host "Module version is different from 2.0.0. Installing the 2.0.0 version"
+          Write-Host "Installing $moduleName 2.0.0 Module..." -ForegroundColor DarkGreen
+          Install-Module $moduleName -RequiredVersion 2.0.0 -Confirm:$false -Force
+          Write-Host "$moduleName Module installed successfully."
+      }
+      else
+      {
+          Write-Progress "$moduleName Module Version 2.0.0 is already installed."
+      }
+    }
+    Write-Host "Importing $moduleName Module"
+
+    Import-Module $moduleName -Scope Global -RequiredVersion 2.0.0
 }
 
 function CreateConnection($token, $azureEnvironment) {
@@ -126,8 +148,11 @@ function CreateAppDelegatedRegistration($token, $userOutput, $appName, $redirect
     }
     try {
         # Import/Install required modules
-        Write-Host "Imported Modules" -ForegroundColor DarkGreen
-        ImportModules
+        Write-Host "Import Modules" -ForegroundColor DarkGreen
+        # Ensure NuGet is installed
+        Write-Progress "Ensuring NuGet is installed"
+        Get-PackageProvider -Name "NuGet" -ForceBootstrap | Out-Null
+	ImportModules -moduleName Microsoft.Graph.Applications
         Write-Host "Modules imported" -ForegroundColor DarkGreen
 
         if($useInteractiveLogin -eq 0)
