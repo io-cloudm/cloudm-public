@@ -178,13 +178,18 @@ Function Build-API-List()
     "storage.googleapis.com"
     )
 
+	# Used for Bucket Size Metric
+	$MonitoringApis = @(
+	"monitoring.googleapis.com"
+	)
+
     #Ignore for now
     $VaultApis = @(
     "vault.googleapis.com"
     )
     
-    $CombinedApis = $KMSApis + $CloudStorageApis
-
+    $CombinedApis = $KMSApis + $CloudStorageApis + $MonitoringApis
+	
     Return $CombinedApis
 }
 
