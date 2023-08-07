@@ -71,9 +71,9 @@ param(
     [String]
     $ServiceAccountId,
 
-    [Parameter(Mandatory=$true, Position=2, ValueFromPipeline=$false, HelpMessage="Region must be one of 'us-central1', 'europe-west1'")]
+    [Parameter(Mandatory=$true, Position=2, ValueFromPipeline=$false, HelpMessage="Region must be one of 'us-central1', 'us-west1', 'us-west2', 'us-west3', 'us-west4', 'us-east1', 'us-east4', 'us-east5', 'us-south1', 'northamerica-northeast1', 'northamerica-northeast2', 'europe-west1', 'europe-west2', 'europe-west3', 'europe-west4', 'europe-west6', 'europe-west8', 'europe-west9', 'europe-west12', 'europe-southwest1', 'europe-central2', 'europe-north1'")]
     [Alias("R")]
-    [ValidateSet("us-central1", "europe-west1")]
+    [ValidateSet("us-central1", "us-west1", "us-west2", "us-west3", "us-west4", "us-east1", "us-east4", "us-east5", "us-south1", "northamerica-northeast1", "northamerica-northeast2", "europe-west1", "europe-west2", "europe-west3", "europe-west4", "europe-west6", "europe-west8", "europe-west9", "europe-west12", "europe-southwest1", "europe-central2", "europe-north1")]
     [String]
     $Region,
 
