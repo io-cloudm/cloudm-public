@@ -200,7 +200,7 @@ function CreateAppDelegatedRegistration($token, $userOutput, $appName, $redirect
        $output = ($nl + $nl + "Delegated Permissions Client ID: " + $appClientId)
        $output += ($nl + "Delegated Permissions Client Secret: " + $appsecret.SecretText)
        
-       $output = $nl + $nl +"Azure AD application successfully registered." + $output
+       $output = $nl + $nl +"Azure AD Delegated application successfully registered." + $output
        Write-Host $output -ForegroundColor Green
     }
     catch [Microsoft.Open.Azure.AD.CommonLibrary.AadAuthenticationFailedException] {
