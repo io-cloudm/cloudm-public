@@ -421,7 +421,7 @@ function GrantAppRoleAssignmentToServicePrincipal($appServicePrincipalId, $permi
     }
 }
 
-function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $userOutput, $appName, $useInteractiveLogin, $azureEnvironment, [bool]$limitedScope) {
+function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $userOutput, $appName, $useInteractiveLogin, $azureEnvironment, [bool]$limitedScope, $mailGroupAlias) {
     Write-Progress ("Running as " + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
     # Validate directory
     CheckDirectory -path $certFolder
@@ -458,7 +458,7 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         Write-Host "Registered app" $appId -ForegroundColor DarkGreen
 
         if (!$certName) {
-            $certName = $app.PublisherDomain + $appName
+            $certName = $appName + "-" + $app.PublisherDomain
         }
 
         # Create certificate
@@ -478,6 +478,8 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         #Assign exchange online admin roll
         ApplyExchangeAdminRole -servicePrincipalId $servicePrincipalId
         Write-Progress "Exchange admin roll applied"
+        $certPath = $certFolder + "\" + $certName + ".pfx"
+
 
         # ---------------------  GRANT ADMIN CONSENT ---------------------------------
 
@@ -508,22 +510,75 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         if (!$userOutput) {
             return $appId
         }
-
-        $certPath = $certFolder + "\" + $certName + ".pfx"
+        
+        $policy
+        if($limitedScope){
+            $policy = ApplyLimitedMailPolicy -appId $appId -certPath $certPath -certPassword $certPassword -tenantName $app.PublisherDomain -appName $appName -mailGroupAlias $mailGroupAlias
+        }
 
         # Display user friendly output
         $nl = [Environment]::NewLine
         $output = ($nl + $nl + "Client ID: " + $appId)
         $output += ($nl + "Certificate Path: " + $certPath)
         $output += ($nl + "Certificate Password: " + $certPassword)
-
+        if($limitedScope){
+            $output += ($nl + "Policy Created for: " + $policy.ScopeName + " with " + $policy.AccessRight)
+        }
         $output = $nl + $nl +"Azure AD application registered." + $output
         Write-Host $output -ForegroundColor Green
+        $output | Out-File -FilePath "$certFolder\$appName.txt"
 
     }
     catch{
         throw
     }
+}
+
+function CreateUpdateApplicationAccessPolicy($appId, $appName, $certPath, $tenantName, $mailGroupAlias){
+    $AppPolicies = Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue
+    if($AppPolicies){
+        foreach ($policie in $AppPolicies)
+        {
+            if($policie.AppId -eq $appId){
+                Write-Host "Removing Application Access Policy for: $appId" 
+                Remove-ApplicationAccessPolicy -Identity $policie.Identity
+            }
+        }
+    }
+    Write-Host "Creating Policy for: $mailGroupAlias" 
+    $policy = New-ApplicationAccessPolicy -AppId $appId -PolicyScopeGroupId $mailGroupAlias -AccessRight RestrictAccess  -Description “Restricted policy for App $appName ($appId)" 
+    return $policy
+}
+
+function ApplyLimitedMailPolicy($appId, $appName, $certPath, $certPassword, $tenantName, $mailGroupAlias){
+    Start-Sleep -Seconds 10
+    if ($certPassword) {
+        $securePassword = ConvertTo-SecureString $certPassword -AsPlainText -Force
+        Connect-ExchangeOnline -CertificateFilePath $certPath -CertificatePassword $securePassword -AppId $appId  -Organization $tenantName -ShowBanner:$false
+    }else{
+        Connect-ExchangeOnline -CertificateFilePath $certPath -AppId $appId  -Organization $tenantName -ShowBanner:$false
+    }
+
+    
+    if(!$mailGroupAlias){
+        $mailGroupAlias = $appName 
+    }
+
+    $distributionGroup = GetCreateMailGroup -mailGroupAlias $mailGroupAlias
+    $policy = CreateUpdateApplicationAccessPolicy -appId $appId -appName $appName -certPath $certPath -tenantName $tenantName -mailGroupAlias $distributionGroup.PrimarySmtpAddress
+    return $policy
+}
+
+function GetCreateMailGroup($mailGroupAlias){
+    $distributionGroup = Get-DistributionGroup -Identity $mailGroupAlias -ErrorAction SilentlyContinue
+    if($distributionGroup){
+        Write-Host "Found Group: " $distributionGroup.PrimarySmtpAddress
+        return $distributionGroup;
+    }else{
+        Write-Host "Creating Distribution Group: $mailGroupAlias" 
+        $distributionGroup = New-DistributionGroup -Name $mailGroupAlias -Alias $mailGroupAlias -Type security -Description “Restricted group for App $appName ($appId)" 
+    }
+    return $distributionGroup;
 }
 
 function ApplyExchangeAdminRole($servicePrincipalId) {
@@ -560,8 +615,15 @@ function CreateAzureAppRegistration() {
         '0'    { $false }
         default { 'neither yes nor no' }
     }
-	CreateAppRegistration -token $token -certFolder $location -certPassword $certPassword -userOutput $true  -appName $appName -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment -limitedScope $limitedScope
-    Disconnect-MgGraph -ErrorAction SilentlyContinue
+    try
+    {
+	    CreateAppRegistration -token $token -certFolder $location -certPassword $certPassword -userOutput $true  -appName $appName -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment -limitedScope $limitedScope
+    }
+    finally
+    {
+        Disconnect-MgGraph -ErrorAction SilentlyContinue
+        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+    }
 }
 
 CreateAzureAppRegistration
