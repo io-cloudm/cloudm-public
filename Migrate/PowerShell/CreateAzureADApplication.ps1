@@ -65,13 +65,13 @@ function CreateInteractiveConnection($azureEnvironment){
 	Connect-MgGraph -Environment $ae -Scope $neededScopes  -ErrorAction Stop
 }
 
-function CreateApplication($appNameProvided) {
+function CreateApplication($appNameProvided, [bool]$limitedScope) {
   if(!$appNameProvided){
     $appName = "CloudM Migrate"
   } 
   
     $appHomePageUrl = "https://cloudm.io/"
-    $requiredResourceAccess = GenerateApplicationApiPermissions
+    $requiredResourceAccess = GenerateApplicationApiPermissions -limitedScope $limitedScope
     $alwaysOnUI = New-Object -TypeName Microsoft.Graph.PowerShell.Models.MicrosoftGraphApplication
     $alwaysOnUI.DisplayName = $appName
     $alwaysOnUI.Web.HomePageUrl = $appHomePageUrl
@@ -98,15 +98,15 @@ function CreateApplication($appNameProvided) {
 }
 
 
-function GenerateApplicationApiPermissions() {
+function GenerateApplicationApiPermissions([bool]$limitedScope) {
     Write-Progress "Generating application api permissions"
     
     $requiredResourceAccess = New-Object System.Collections.Generic.List[Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess]
 
-    $sharepointAccess = GetSharepointApiPermissions
+    $sharepointAccess = GetSharepointApiPermissions -limitedScope $limitedScope
     $requiredResourceAccess.Add($sharepointAccess)
 
-    $graphAccess = GetMicrosoftGraphApiPermissions
+    $graphAccess = GetMicrosoftGraphApiPermissions -limitedScope $limitedScope
     $requiredResourceAccess.Add($graphAccess)
 
     $exchangeAccess = GetExchangeApiPermissions
@@ -115,18 +115,18 @@ function GenerateApplicationApiPermissions() {
     return $requiredResourceAccess;
 }
 
-function GetSharepointApiPermissions() {
+function GetSharepointApiPermissions([bool]$limitedScope) {
     #Office 365 SharePoint Online app permissions
     $sharepointAppId = "00000003-0000-0ff1-ce00-000000000000"
-    $roles = GetSharepointPermissionsRoles
+    $roles = GetSharepointPermissionsRoles -limitedScope $limitedScope
     return GenerateRequiredResourceAccess -resourceAppId $sharepointAppId -roles $roles
 }
 
 
-function GetMicrosoftGraphApiPermissions() {
+function GetMicrosoftGraphApiPermissions([bool]$limitedScope) {
     #OneNote app permissions
     $graphAppId = "00000003-0000-0000-c000-000000000000"
-    $roles = GetMicrosoftGraphPermissionsRoles
+    $roles = GetMicrosoftGraphPermissionsRoles -limitedScope $limitedScope
 
     return GenerateRequiredResourceAccess -resourceAppId $graphAppId -roles $roles
 }
@@ -145,14 +145,13 @@ function GetExchangePermissionsRoles() {
     return $roles
 }
 
-function GetMicrosoftGraphPermissionsRoles() {
+function GetMicrosoftGraphPermissionsRoles([bool]$limitedScope) {
      $roles = @(
         "75359482-378d-4052-8f01-80520e7db3cd",
         "5b567255-7703-4780-807c-7be8301ae99b",
         "62a82d76-70ea-41e2-9197-370581804d09",
         "e2a3a72e-5f79-4c64-b1b1-878b674786c9",
         "3aeca27b-ee3a-4c2b-8ded-80376e2134a4",
-        "9492366f-7969-46a4-8d15-ed1a20078fff",
         "df021288-bdef-4463-88db-98f22de89214",
         "913b9306-0ce1-42b8-9137-6a7df690a760",
         "35930dcf-aceb-4bd1-b99a-8ffed403c974",        
@@ -161,14 +160,19 @@ function GetMicrosoftGraphPermissionsRoles() {
         "dfb0dd15-61de-45b2-be36-d6a69fba3c79",
         "44e666d1-d276-445b-a5fc-8815eeb81d55"
     )
+    switch($limitedScope){
+        $true {$roles += "883ea226-0bf2-4a8f-9f9d-92c9162a727d"}
+        $false {$roles +="9492366f-7969-46a4-8d15-ed1a20078fff"}
+    }
     return $roles
 }
 
-function GetSharepointPermissionsRoles(){
-    $roles = @(
-        "678536fe-1083-478a-9c59-b99265e6b0d3",
-        "741f803b-c850-494e-b5df-cde7c675a1ca"
-    )
+function GetSharepointPermissionsRoles([bool]$limitedScope){
+    $roles = @()
+    switch($limitedScope){
+        $true {$roles +="20d37865-089c-4dee-8c41-6967602d4ac8"}
+        $false {$roles +="678536fe-1083-478a-9c59-b99265e6b0d3", "741f803b-c850-494e-b5df-cde7c675a1ca"}
+    }
     return $roles
 }
 
@@ -417,7 +421,7 @@ function GrantAppRoleAssignmentToServicePrincipal($appServicePrincipalId, $permi
     }
 }
 
-function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $userOutput, $appName, $useInteractiveLogin, $azureEnvironment) {
+function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $userOutput, $appName, $useInteractiveLogin, $azureEnvironment, [bool]$limitedScope) {
     Write-Progress ("Running as " + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
     # Validate directory
     CheckDirectory -path $certFolder
@@ -448,13 +452,13 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
 
         # Create Application
         $tenantId = $connectionInfo.tenantId
-        $app = CreateApplication $appName
+        $app = CreateApplication $appName -limitedScope $limitedScope
         $appObjectId = $app.Id
         $appId = $app.AppId
         Write-Host "Registered app" $appId -ForegroundColor DarkGreen
 
         if (!$certName) {
-            $certName = $app.PublisherDomain
+            $certName = $app.PublisherDomain + $appName
         }
 
         # Create certificate
@@ -480,14 +484,14 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         #Get the Permission ServicePrincipalId for Graph
         $spAppId = '00000003-0000-0000-c000-000000000000' #Graph API
         $permissionServicePrincipalId = GetServicePrincipalIdByAppId -spAppId $spAppId
-        $roles = GetMicrosoftGraphPermissionsRoles
+        $roles = GetMicrosoftGraphPermissionsRoles -limitedScope $limitedScope
         #Grant Admin consent to permissions for Graph APIs
         GrantAppRoleAssignmentToServicePrincipal -appServicePrincipalId $servicePrincipalId -permissionServicePrincipalId $permissionServicePrincipalId -roles $roles
 
         #Get the Permission ServicePrincipalId for Sharepoint
         $spAppId = '00000003-0000-0ff1-ce00-000000000000' #Sharepoint API
         $permissionServicePrincipalId = GetServicePrincipalIdByAppId -spAppId $spAppId
-        $roles = GetSharepointPermissionsRoles
+        $roles = GetSharepointPermissionsRoles $limitedScope
         #Grant Admin consent to permissions for Sharepoint APIs
         GrantAppRoleAssignmentToServicePrincipal -appServicePrincipalId $servicePrincipalId -permissionServicePrincipalId $permissionServicePrincipalId -roles $roles
 
@@ -536,7 +540,6 @@ function ApplyExchangeAdminRole($servicePrincipalId) {
     }
 }
 
-#This function is used to be run manually, for debug purposes. It is not called in this script
 function CreateAzureAppRegistration() {
     $certPassword = Read-Host 'Enter Your Certificate Password:' 
     $location = Read-Host 'Enter the file location to save certificate:'
@@ -551,7 +554,13 @@ function CreateAzureAppRegistration() {
 	else{
 		Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
 	}
-	CreateAppRegistration -token $token -certFolder $location -certPassword $certPassword -userOutput $true  -appName $appName -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment
+    $limitedScopePrompt = Read-Host 'Type 0 for default scopes or 1 for limited scopes'
+    $limitedScope = switch ($limitedScopePrompt) {
+        '1'   { $true }
+        '0'    { $false }
+        default { 'neither yes nor no' }
+    }
+	CreateAppRegistration -token $token -certFolder $location -certPassword $certPassword -userOutput $true  -appName $appName -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment -limitedScope $limitedScope
     Disconnect-MgGraph -ErrorAction SilentlyContinue
 }
 
