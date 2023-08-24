@@ -599,8 +599,15 @@ function CreateAzureAppRegistration() {
     $location = Read-Host 'Enter the file location to save certificate:'
     $appName = Read-Host 'Enter the application Name'
 	$azureEnvironment = Read-Host "Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
-	Write-Host 'Do you want to login to Graph interactively (recommended if you are running the script manually) or with a Graph token?'; 
-	$interactiveLogin = Read-Host 'Type 0 for interactive login, 1 for a login with a Graph Token'
+    $limitedScopePrompt = Read-Host 'Type 0 for default scopes or 1 for limited scopes'
+    $limitedScope = switch ($limitedScopePrompt) {
+        '1'   { $true }
+        '0'    { $false }
+        default { $false }
+    }
+    Write-Host 'Do you want to login to Graph interactively (recommended if you are running the script manually) or with a Graph token?';
+    $interactiveLogin = Read-Host 'Type 0 for interactive login, 1 for a login with a Graph Token'
+     
 	$token = '';
 	if($interactiveLogin -eq 1){
 		$token = Read-Host 'Please enter the Graph Token'
@@ -608,12 +615,7 @@ function CreateAzureAppRegistration() {
 	else{
 		Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
 	}
-    $limitedScopePrompt = Read-Host 'Type 0 for default scopes or 1 for limited scopes'
-    $limitedScope = switch ($limitedScopePrompt) {
-        '1'   { $true }
-        '0'    { $false }
-        default { 'neither yes nor no' }
-    }
+
     try
     {
 	    CreateAppRegistration -token $token -certFolder $location -certPassword $certPassword -userOutput $true  -appName $appName -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment -limitedScope $limitedScope
