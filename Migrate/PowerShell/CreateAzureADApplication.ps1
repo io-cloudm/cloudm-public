@@ -8,7 +8,7 @@ function ImportModules($moduleName) {
     {
         Write-Progress "Microsoft.Graph module is not installed."
         Write-Progress "Installing $moduleName Module"
-        Write-Host "Installing $moduleName Module..." -ForegroundColor DarkGreen
+        Write-Host "Installing $moduleName Module..." -ForegroundColor Green
         Install-Module $moduleName -RequiredVersion 2.0.0 -Confirm:$false -Force
         Write-Progress "$moduleName Module installed successfully."
 
@@ -26,7 +26,7 @@ function ImportModules($moduleName) {
       if(!($stringVersion -eq '2.0.0'))
       {
           Write-Host "Module version is different from 2.0.0. Installing the 2.0.0 version"
-          Write-Host "Installing $moduleName 2.0.0 Module..." -ForegroundColor DarkGreen
+          Write-Host "Installing $moduleName 2.0.0 Module..." -ForegroundColor Green
           Install-Module $moduleName -RequiredVersion 2.0.0 -Confirm:$false -Force
           Write-Host "$moduleName Module installed successfully."
       }
@@ -330,6 +330,7 @@ function CheckDirectory($path) {
     }
 }
 
+
 function ExportPFXFile($certFolder, $certName, $certPassword) {
     Write-Progress "Exporting PFX"
     if ($certName.ToLower().StartsWith("cn=")) {
@@ -429,14 +430,14 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
      try {
 
         # Import/Install required modules
-        Write-Host "Import Modules" -ForegroundColor DarkGreen
+        Write-Host "Import Modules" -ForegroundColor Green
         # Ensure NuGet is installed
         Write-Progress "Ensuring NuGet is installed"
         Get-PackageProvider -Name "NuGet" -ForceBootstrap | Out-Null
         ImportModules -moduleName Microsoft.Graph.Identity.DirectoryManagement
         ImportModules -moduleName Microsoft.Graph.Applications
 
-        Write-Host "Modules imported" -ForegroundColor DarkGreen
+        Write-Host "Modules imported" -ForegroundColor Green
 
         # Connect to Mg-Graph using a pre-generated access token
 		if($useInteractiveLogin -eq 0)
@@ -448,14 +449,13 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
             CreateConnection -token $token  -azureEnvironment $azureEnvironment
 		}
        
-        Write-Host "Connected" -ForegroundColor DarkGreen
-
+        Write-Host "Connected" -ForegroundColor Green
+        $connectionInfo = Get-MgContext
         # Create Application
-        $tenantId = $connectionInfo.tenantId
         $app = CreateApplication $appName -limitedScope $limitedScope
         $appObjectId = $app.Id
         $appId = $app.AppId
-        Write-Host "Registered app" $appId -ForegroundColor DarkGreen
+        Write-Host "Registered app" $appId -ForegroundColor Green
 
         if (!$certName) {
             $certName = $appName + "-" + $app.PublisherDomain
@@ -469,11 +469,11 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         $certEndDate = ([DateTime]::Now).AddYears(5).ToString($dateFormat)
 
         CreateCertificate -appId $appId -certFolder $certFolder -certName $certName -certPassword $certPassword -certStartDate $certStartDate -certEndDate $certEndDate
-        Write-Host "Certificate created" -ForegroundColor DarkGreen
+        Write-Host "Certificate created" -ForegroundColor Green
 
         # Create Service principal
         $servicePrincipalId = GetOrCreateServicePrincipal  -appId $appId 
-        Write-Host "Service principal created" -ForegroundColor DarkGreen
+        Write-Host "Service principal created" -ForegroundColor Green
 
         #Assign exchange online admin roll
         ApplyExchangeAdminRole -servicePrincipalId $servicePrincipalId
@@ -540,12 +540,12 @@ function CreateUpdateApplicationAccessPolicy($appId, $appName, $certPath, $tenan
         foreach ($policie in $AppPolicies)
         {
             if($policie.AppId -eq $appId){
-                Write-Host "Removing Application Access Policy for: $appId" 
+                Write-Host "Removing Application Access Policy for: $appId" -ForegroundColor Green 
                 Remove-ApplicationAccessPolicy -Identity $policie.Identity
             }
         }
     }
-    Write-Host "Creating Policy for: $mailGroupAlias" 
+    Write-Host "Creating Policy for: $mailGroupAlias" -ForegroundColor Green
     $policy = New-ApplicationAccessPolicy -AppId $appId -PolicyScopeGroupId $mailGroupAlias -AccessRight RestrictAccess  -Description “Restricted policy for App $appName ($appId)" 
     return $policy
 }
@@ -572,11 +572,10 @@ function ApplyLimitedMailPolicy($appId, $appName, $certPath, $certPassword, $ten
 function GetCreateMailGroup($mailGroupAlias){
     $distributionGroup = Get-DistributionGroup -Identity $mailGroupAlias -ErrorAction SilentlyContinue
     if($distributionGroup){
-        Write-Host "Found Group: " $distributionGroup.PrimarySmtpAddress
-        return $distributionGroup;
+        Write-Host "Found Group: " $distributionGroup.PrimarySmtpAddress -ForegroundColor Green
     }else{
-        Write-Host "Creating Distribution Group: $mailGroupAlias" 
-        $distributionGroup = New-DistributionGroup -Name $mailGroupAlias -Alias $mailGroupAlias -Type security -Description “Restricted group for App $appName ($appId)" 
+        Write-Host "Creating Distribution Group: $mailGroupAlias" -ForegroundColor Green
+        $distributionGroup = New-DistributionGroup -Name $mailGroupAlias -Alias $mailGroupAlias  -Type security -Description “Restricted group for App $appName ($appId)"
     }
     return $distributionGroup;
 }
