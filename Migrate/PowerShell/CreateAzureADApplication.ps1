@@ -551,7 +551,8 @@ function CreateUpdateApplicationAccessPolicy($appId, $appName, $certPath, $tenan
 }
 
 function ApplyLimitedMailPolicy($appId, $appName, $certPath, $certPassword, $tenantName, $mailGroupAlias){
-    Start-Sleep -Seconds 10
+    Write-Host "Waiting..."
+    Start-Sleep -Seconds 15
     if ($certPassword) {
         $securePassword = ConvertTo-SecureString $certPassword -AsPlainText -Force
         Connect-ExchangeOnline -CertificateFilePath $certPath -CertificatePassword $securePassword -AppId $appId  -Organization $tenantName -ShowBanner:$false
