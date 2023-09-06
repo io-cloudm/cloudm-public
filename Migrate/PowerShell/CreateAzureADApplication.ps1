@@ -1,77 +1,80 @@
 ﻿#Requires -RunAsAdministrator
 
-function ImportModules($moduleName) {
+function ImportModules($moduleName, $requiredVersion) {
     Write-Progress "Importing modules"
     #Install and Import Graph Module
     Write-Progress "Checking if $moduleName is installed"
-    if (!(Get-Module -ListAvailable -Name $moduleName)) 
-    {
-        Write-Progress "Microsoft.Graph module is not installed."
+    if (!(Get-InstalledModule $moduleName)) {
+        Write-Progress "$moduleName module is not installed."
         Write-Progress "Installing $moduleName Module"
         Write-Host "Installing $moduleName Module..." -ForegroundColor Green
-        Install-Module $moduleName -RequiredVersion 2.0.0 -Confirm:$false -Force
+        Install-Module $moduleName -RequiredVersion $requiredVersion -Confirm:$false -Force
         Write-Progress "$moduleName Module installed successfully."
 
     }
-    else
-    {
+    else {
       
-      #Check the version. We need Version 2.0.0 to be installed. If any other version (newer or older) is installed, we need to reinstall 2.0.0 
-      #(No need to delete, a reinstall will upgrade to 2.0.0)
-      #This is related to issue CMT-6388
-      $stringVersion = (Get-InstalledModule $moduleName).Version.ToString()
-      Write-Progress "$moduleName module is already installed with the version " 
-      Write-Progress $stringVersion
+        #Check the version. We need Version 2.0.0 to be installed. If any other version (newer or older) is installed, we need to reinstall 2.0.0 
+        #(No need to delete, a reinstall will upgrade to 2.0.0)
+        #This is related to issue CMT-6388
+        $stringVersion = (Get-InstalledModule $moduleName).Version.ToString()
+        Write-Progress "$moduleName module is already installed with the version " 
+        Write-Progress $stringVersion
 
-      if(!($stringVersion -eq '2.0.0'))
-      {
-          Write-Host "Module version is different from 2.0.0. Installing the 2.0.0 version"
-          Write-Host "Installing $moduleName 2.0.0 Module..." -ForegroundColor Green
-          Install-Module $moduleName -RequiredVersion 2.0.0 -Confirm:$false -Force
-          Write-Host "$moduleName Module installed successfully."
-      }
-      else
-      {
-          Write-Progress "$moduleName Module Version 2.0.0 is already installed."
-      }
+        if (!($stringVersion -eq $requiredVersion)) {
+            Write-Host "Module version is different from $requiredVersion. Installing the $requiredVersion version"
+            Write-Host "Installing $moduleName $requiredVersion Module..." -ForegroundColor Green
+            Install-Module $moduleName -RequiredVersion $requiredVersion -Confirm:$false -Force
+            Write-Host "$moduleName Module installed successfully."
+        }
+        else {
+            Write-Progress "$moduleName Module Version $requiredVersion is already installed."
+        }
     }
     Write-Host "Importing $moduleName Module"
 
-    Import-Module $moduleName -Scope Global -RequiredVersion 2.0.0
+    Import-Module $moduleName -Scope Global -RequiredVersion $requiredVersion -ErrorAction SilentlyContinue
 } 
 
 function CreateConnection($token, $azureEnvironment) {
     Write-Host "Connecting to MgGraph using an Access token"
-	$ae = switch ( $azureEnvironment )
-    {
+    $ae = switch ( $azureEnvironment ) {
         0 { 'Global' }
         1 { 'China' }
         2 { 'USGov' }
         3 { 'USGovDoD' }
     }
-    Connect-MgGraph -Environment $ae -AccessToken $token -ErrorAction Stop
+    Connect-MgGraph -Environment $ae -AccessToken $token -NoWelcome -ErrorAction Stop
 }
 
-function CreateInteractiveConnection($azureEnvironment){
-	Write-Host "Connecting to MgGraph using an Interactive login"
-	$ae = switch ( $azureEnvironment )
-    {
+function CreateInteractiveConnection($azureEnvironment) {
+    Write-Host "Connecting to MgGraph using an Interactive login"
+    $ae = switch ( $azureEnvironment ) {
         0 { 'Global' }
         1 { 'China' }
         2 { 'USGov' }
         3 { 'USGovDoD' }
     }
-	$neededScopes = "offline_access openid profile Application.ReadWrite.All Organization.Read.All Directory.Read.All RoleManagement.Read.Directory AppRoleAssignment.ReadWrite.All RoleManagement.ReadWrite.Directory";
-	Connect-MgGraph -Environment $ae -Scope $neededScopes  -ErrorAction Stop
+    $neededScopes = @(
+        "offline_access"
+        "openid"
+        "profile"
+        "Application.ReadWrite.All"
+        "Organization.Read.All"
+        "Directory.Read.All"
+        "RoleManagement.Read.Directory"
+        "AppRoleAssignment.ReadWrite.All"
+        "RoleManagement.ReadWrite.Directory"
+    )
+    Connect-MgGraph -Environment $ae -Scope $neededScopes -NoWelcome -ErrorAction Stop
 }
 
-function CreateApplication($appNameProvided, [bool]$limitedScope) {
-  if(!$appNameProvided){
-    $appName = "CloudM Migrate"
-  } 
+function CreateApplication($appNameProvided, $requiredResourceAccess) {
+    if (!$appNameProvided) {
+        $appName = "CloudM Migrate"
+    } 
   
     $appHomePageUrl = "https://cloudm.io/"
-    $requiredResourceAccess = GenerateApplicationApiPermissions -limitedScope $limitedScope
     $alwaysOnUI = New-Object -TypeName Microsoft.Graph.PowerShell.Models.MicrosoftGraphApplication
     $alwaysOnUI.DisplayName = $appName
     $alwaysOnUI.Web.HomePageUrl = $appHomePageUrl
@@ -79,10 +82,10 @@ function CreateApplication($appNameProvided, [bool]$limitedScope) {
     $alwaysOnUI.SignInAudience = "AzureADMyOrg"
     $alwaysOnUI.Info.PrivacyStatementUrl = "https://www.cloudm.io/legal/privacy-policy"
     $alwaysOnUI.Info.TermsOfServiceUrl = "https://www.cloudm.io/legal/terms-conditions"
-    $alwaysOnUI.RequiredResourceAccess = $requiredResourceAccess
+
     # Check if app has already been installed
     Write-Progress "Checking if app already exists"
-    if ($app = 	Get-MgApplication -Filter "DisplayName eq '$($appName)'" -ErrorAction SilentlyContinue) {
+    if ($app = Get-MgApplication -Filter "DisplayName eq '$($appName)'" -ErrorAction SilentlyContinue) {
         Write-Progress "App already exists"
         Write-Host "App already exists" -ForegroundColor Yellow
         $appURI = "api://" + $app.AppId
@@ -97,6 +100,64 @@ function CreateApplication($appNameProvided, [bool]$limitedScope) {
     return $app
 }
 
+
+
+
+
+#region Generate Permissions & Roles
+function GetSharepointApiPermissions([bool]$limitedScope) {
+    $sharepointAppId = "00000003-0000-0ff1-ce00-000000000000"
+    $roles = GetSharepointPermissionsRoles -limitedScope $limitedScope
+    return GenerateRequiredResourceAccess -resourceAppId $sharepointAppId -roles $roles
+}
+
+function GetSharepointPermissionsRoles([bool]$limitedScope) {
+    $roles = @()
+    switch ($limitedScope) {
+        $true { $roles += "20d37865-089c-4dee-8c41-6967602d4ac8" }
+        $false { $roles += "678536fe-1083-478a-9c59-b99265e6b0d3", "741f803b-c850-494e-b5df-cde7c675a1ca" }
+    }
+    return $roles
+}
+
+function GetExchangeApiPermissions() {
+    $exchangeAppId = "00000002-0000-0ff1-ce00-000000000000"
+    $roles = GetExchangePermissionsRoles
+    return GenerateRequiredResourceAccess -resourceAppId $exchangeAppId -roles $roles
+}
+
+function GetExchangePermissionsRoles() {
+    $roles = @("dc890d15-9560-4a4c-9b7f-a736ec74ec40", "dc50a0fb-09a3-484d-be87-e023b12c6440")
+    return $roles
+}
+
+function GetMicrosoftGraphApiPermissions([bool]$limitedScope) {
+    $graphAppId = "00000003-0000-0000-c000-000000000000"
+    $roles = GetMicrosoftGraphPermissionsRoles -limitedScope $limitedScope
+    return GenerateRequiredResourceAccess -resourceAppId $graphAppId -roles $roles
+}
+
+function GetMicrosoftGraphPermissionsRoles([bool]$limitedScope) {
+    $roles = @(
+        "75359482-378d-4052-8f01-80520e7db3cd",
+        "5b567255-7703-4780-807c-7be8301ae99b",
+        "62a82d76-70ea-41e2-9197-370581804d09",
+        "e2a3a72e-5f79-4c64-b1b1-878b674786c9",
+        "3aeca27b-ee3a-4c2b-8ded-80376e2134a4",
+        "df021288-bdef-4463-88db-98f22de89214",
+        "913b9306-0ce1-42b8-9137-6a7df690a760",
+        "35930dcf-aceb-4bd1-b99a-8ffed403c974",        
+        "7ab1d382-f21e-4acd-a863-ba3e13f7da61",
+        "294ce7c9-31ba-490a-ad7d-97a7d075e4ed",
+        "dfb0dd15-61de-45b2-be36-d6a69fba3c79",
+        "44e666d1-d276-445b-a5fc-8815eeb81d55"
+    )
+    switch ($limitedScope) {
+        $true { $roles += "883ea226-0bf2-4a8f-9f9d-92c9162a727d" }
+        $false { $roles += "9492366f-7969-46a4-8d15-ed1a20078fff" }
+    }
+    return $roles
+}
 
 function GenerateApplicationApiPermissions([bool]$limitedScope) {
     Write-Progress "Generating application api permissions"
@@ -115,68 +176,41 @@ function GenerateApplicationApiPermissions([bool]$limitedScope) {
     return $requiredResourceAccess;
 }
 
-function GetSharepointApiPermissions([bool]$limitedScope) {
-    #Office 365 SharePoint Online app permissions
-    $sharepointAppId = "00000003-0000-0ff1-ce00-000000000000"
-    $roles = GetSharepointPermissionsRoles -limitedScope $limitedScope
-    return GenerateRequiredResourceAccess -resourceAppId $sharepointAppId -roles $roles
+function GenerateApplicationApiPermissionsAdminApp() {
+    Write-Progress "Generating Admin application api permissions"
+    
+    $requiredResourceAccess = New-Object System.Collections.Generic.List[Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess]
+    $graphAccess = GetMicrosoftGraphApiPermissionsAdminApp
+    $requiredResourceAccess.Add($graphAccess)
+    $sharepointAccess = GetSharepointApiPermissionsAdminApp
+    $requiredResourceAccess.Add($sharepointAccess)
+    return $requiredResourceAccess;
 }
 
-
-function GetMicrosoftGraphApiPermissions([bool]$limitedScope) {
-    #OneNote app permissions
+function GetMicrosoftGraphApiPermissionsAdminApp() {
     $graphAppId = "00000003-0000-0000-c000-000000000000"
-    $roles = GetMicrosoftGraphPermissionsRoles -limitedScope $limitedScope
-
+    $roles = GetMicrosoftGraphPermissionsRolesAdminApp
     return GenerateRequiredResourceAccess -resourceAppId $graphAppId -roles $roles
 }
 
-function GetExchangeApiPermissions() {
-    #Office 365 Exchange Online app permissions
-    $exchangeAppId = "00000002-0000-0ff1-ce00-000000000000"
-    $roles = GetExchangePermissionsRoles
-
-    return GenerateRequiredResourceAccess -resourceAppId $exchangeAppId -roles $roles
-}
-
-function GetExchangePermissionsRoles() {
-    $roles = @("dc890d15-9560-4a4c-9b7f-a736ec74ec40",
-    "dc50a0fb-09a3-484d-be87-e023b12c6440")
-    return $roles
-}
-
-function GetMicrosoftGraphPermissionsRoles([bool]$limitedScope) {
-     $roles = @(
-        "75359482-378d-4052-8f01-80520e7db3cd",
-        "5b567255-7703-4780-807c-7be8301ae99b",
-        "62a82d76-70ea-41e2-9197-370581804d09",
-        "e2a3a72e-5f79-4c64-b1b1-878b674786c9",
-        "3aeca27b-ee3a-4c2b-8ded-80376e2134a4",
-        "df021288-bdef-4463-88db-98f22de89214",
-        "913b9306-0ce1-42b8-9137-6a7df690a760",
-        "35930dcf-aceb-4bd1-b99a-8ffed403c974",        
-        "7ab1d382-f21e-4acd-a863-ba3e13f7da61",
-        "294ce7c9-31ba-490a-ad7d-97a7d075e4ed",
-        "dfb0dd15-61de-45b2-be36-d6a69fba3c79",
-        "44e666d1-d276-445b-a5fc-8815eeb81d55"
+function GetMicrosoftGraphPermissionsRolesAdminApp() {
+    $roles = @(
+        "a82116e5-55eb-4c41-a434-62fe8a61c773"
     )
-    switch($limitedScope){
-        $true {$roles += "883ea226-0bf2-4a8f-9f9d-92c9162a727d"}
-        $false {$roles +="9492366f-7969-46a4-8d15-ed1a20078fff"}
-    }
     return $roles
 }
 
-function GetSharepointPermissionsRoles([bool]$limitedScope){
-    $roles = @()
-    switch($limitedScope){
-        $true {$roles +="20d37865-089c-4dee-8c41-6967602d4ac8"}
-        $false {$roles +="678536fe-1083-478a-9c59-b99265e6b0d3", "741f803b-c850-494e-b5df-cde7c675a1ca"}
-    }
-    return $roles
+function GetSharepointApiPermissionsAdminApp() {
+    $sharepointAppId = "00000003-0000-0ff1-ce00-000000000000"
+    $roles = GetSharepointPermissionsRolesAdminApp
+    return GenerateRequiredResourceAccess -resourceAppId $sharepointAppId -roles $roles
 }
 
-
+function GetSharepointPermissionsRolesAdminApp() {
+    $roles = @("df021288-bdef-4463-88db-98f22de89214", "678536fe-1083-478a-9c59-b99265e6b0d3")
+    return $roles
+}
+#endregion
 
 function GenerateRequiredResourceAccess($resourceAppId, $roles) {
     $requiredResourceAccess = New-Object PowerShell.Cmdlets.Resources.MSGraph.Models.ApiV10.MicrosoftGraphRequiredResourceAccess
@@ -199,10 +233,11 @@ function GenerateResourceAccess($resourceId, $resourceType) {
     return $resourceAccess
 }
 
+#region Certificate
 function CreateCertificate($appId, $certFolder, $certName, $certPassword, $certStartDate, $certEndDate) {
     Write-Progress "Creating certificate"
     
-    $app = 	Get-MgApplication -Filter "AppId eq '$appId'"
+    $app = Get-MgApplication -Filter "AppId eq '$appId'"
     Write-Progress "Checking if certificate already exists"
     # Check if a non-expired certificate already exists
     $existingCredentials = (Get-MgApplication -Filter "AppId eq '$appId'").KeyCredentials
@@ -225,9 +260,9 @@ function CreateCertificate($appId, $certFolder, $certName, $certPassword, $certS
     # Upload a certificate if needed
     $certData = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$certFolder\$certName.cer")
     $keyCreds = @{ 
-        Type = "AsymmetricX509Cert";
+        Type  = "AsymmetricX509Cert";
         Usage = "Verify";
-        key =  $certData.GetRawCertData();
+        key   = $certData.GetRawCertData();
     }
     Update-MgApplication -ApplicationId $app.Id -KeyCredentials $keyCreds
 }
@@ -251,6 +286,7 @@ function IsValidCertificate($certificate) {
 
     return $true
 }
+
 
 function CreateSelfSignedCertificate($certName, $startDate, $endDate, $forceCert) {
     Write-Progress "Creating self signed certificate"
@@ -317,19 +353,21 @@ function CheckDirectory($path) {
     try {
         Write-Progress "Checking if new file can be created in directory"
         New-Item -Path $path -Name "permissioncheck" -ItemType "file"
-    } catch {
+    }
+    catch {
         throw "User does not have access to directory " + $path
-    } finally {
+    }
+    finally {
         try {
             Write-Progress "Removing permissioncheck file"
             Remove-Item -Path ($path + "\permissioncheck") -Force
-        } catch {
+        }
+        catch {
             Write-Progress "Could not remove permissioncheck file. " $_.Exception.Message
             Write-Host "Could not remove permissioncheck file. " $_.Exception.Message
         }
     }
 }
-
 
 function ExportPFXFile($certFolder, $certName, $certPassword) {
     Write-Progress "Exporting PFX"
@@ -338,9 +376,10 @@ function ExportPFXFile($certFolder, $certName, $certPassword) {
         $certName = $certName.Substring(3)
     }
     if ($certPassword) {
-      $securePassword = ConvertTo-SecureString $certPassword -AsPlainText -Force
-    } else {
-      $securePassword = (new-object System.Security.SecureString)
+        $securePassword = ConvertTo-SecureString $certPassword -AsPlainText -Force
+    }
+    else {
+        $securePassword = (new-object System.Security.SecureString)
     }
     Write-Progress "Finding cert from store"
     $cert = Get-ChildItem -Path Cert:\LocalMachine\my | where-object { $_.Subject -eq "CN=$certName" }
@@ -350,7 +389,6 @@ function ExportPFXFile($certFolder, $certName, $certPassword) {
     Write-Progress "Generating cer file"
     Export-Certificate -Cert $cert -Type CERT -FilePath "$certFolder\$certName.cer"
 }
-
 function RemoveCertsFromStore($certName, $store) {
     Write-Progress "Removing certs from store" $store
     # Once the certificates have been been exported we can safely remove them from the store
@@ -364,6 +402,7 @@ function RemoveCertsFromStore($certName, $store) {
         remove-item $c.PSPath
     }
 }
+#endregion
 
 function GenerateRequiredResourceAccess($resourceAppId, $roles) {
     $requiredResourceAccess = New-Object Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess
@@ -395,28 +434,23 @@ function GetOrCreateServicePrincipal($appId) {
     }
     return $servicePrincipal.Id
 }
-
 function GetServicePrincipalIdByAppId($spAppId) {
     Write-Progress "Getting ServicePrincipal Id for $spAppId "
-    $servicePrincipal= Get-MgServicePrincipal -Filter "AppId eq '$spAppId'"
+    $servicePrincipal = Get-MgServicePrincipal -Filter "AppId eq '$spAppId'"
     return $servicePrincipal.Id;
 }
 
-
 function GrantAppRoleAssignmentToServicePrincipal($appServicePrincipalId, $permissionServicePrincipalId, $roles) {
     
-     #Grant Admin consent on each role
+    #Grant Admin consent on each role
     foreach ($roleId in $roles) {
-        try
-        {
+        try {
             New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $appServicePrincipalId -PrincipalId  $appServicePrincipalId -ResourceId $permissionServicePrincipalId -AppRoleId $roleId -ErrorAction "stop" | Out-Null
         }
-        catch
-        {
+        catch {
             $stringException = Out-String -InputObject $_.Exception 
-            if( $stringException -like "*token validation failure*" -or $stringException -like "*nsufficient privileges to complete the*" )
-            {
-               throw
+            if ( $stringException -like "*token validation failure*" -or $stringException -like "*nsufficient privileges to complete the*" ) {
+                throw
             }
         }
     }
@@ -427,33 +461,32 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
     # Validate directory
     CheckDirectory -path $certFolder
 
-     try {
-
+    try {
         # Import/Install required modules
         Write-Host "Import Modules" -ForegroundColor Green
         # Ensure NuGet is installed
         Write-Progress "Ensuring NuGet is installed"
         Get-PackageProvider -Name "NuGet" -ForceBootstrap | Out-Null
-        ImportModules -moduleName Microsoft.Graph.Identity.DirectoryManagement
-        ImportModules -moduleName Microsoft.Graph.Applications
 
-        Write-Host "Modules imported" -ForegroundColor Green
+        ImportModules -moduleName Microsoft.Graph.Identity.DirectoryManagement -requiredVersion 2.4.0
+        ImportModules -moduleName Microsoft.Graph.Applications -requiredVersion 2.4.0
+        if ($limitedScope) {
+            ImportModules -moduleName Microsoft.Graph.Files -requiredVersion 2.4.0
+            ImportModules -moduleName Microsoft.Graph.Sites -requiredVersion 2.4.0
+        }
 
         # Connect to Mg-Graph using a pre-generated access token
-		if($useInteractiveLogin -eq 0)
-		{
+        if ($useInteractiveLogin -eq 0) {
             CreateInteractiveConnection -azureEnvironment $azureEnvironment
-		}
-		else
-		{
+        }
+        else {
             CreateConnection -token $token  -azureEnvironment $azureEnvironment
-		}
-       
+        }
+           
         Write-Host "Connected" -ForegroundColor Green
-        $connectionInfo = Get-MgContext
+        $requiredResourceAccess = GenerateApplicationApiPermissions -limitedScope $limitedScope
         # Create Application
-        $app = CreateApplication $appName -limitedScope $limitedScope
-        $appObjectId = $app.Id
+        $app = CreateApplication $appName -requiredResourceAccess $requiredResourceAccess
         $appId = $app.AppId
         Write-Host "Registered app" $appId -ForegroundColor Green
 
@@ -512,34 +545,74 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         }
         
         $policy
-        if($limitedScope){
+        if ($limitedScope) {
+            if (!$mailGroupAlias) {
+                $mailGroupAlias = $appName 
+            }
             $policy = ApplyLimitedMailPolicy -appId $appId -certPath $certPath -certPassword $certPassword -tenantName $app.PublisherDomain -appName $appName -mailGroupAlias $mailGroupAlias
+            $adminApp = CreateRegistrationAdminApp -appName "CloudM Admin App" -certFolder $certFolder -certName "CloudM Admin App" -certPassword $certPassword
+            $tenantId = (Get-MgDomain | Where-Object { $_.isInitial }).Id
+            ProcessEmailDrive -certFolder $certFolder -mailGroupAlias $mailGroupAlias -adminAppCertificate $adminApp.CertPath -adminAppClientId $adminApp.App.AppId -tenantId $tenantId  -clientAppId  $appId
         }
 
-        # Display user friendly output
-        $nl = [Environment]::NewLine
-        $output = ($nl + $nl + "Client ID: " + $appId)
-        $output += ($nl + "Certificate Path: " + $certPath)
-        $output += ($nl + "Certificate Password: " + $certPassword)
-        if($limitedScope){
-            $output += ($nl + "Policy Created for: " + $policy.ScopeName + " with " + $policy.AccessRight)
-        }
-        $output = $nl + $nl +"Azure AD application registered." + $output
-        Write-Host $output -ForegroundColor Green
-        $output | Out-File -FilePath "$certFolder\$appName.txt"
+        OutPutFile -app $app -certPath $certPath -certPassword $certPassword -policy $policy
 
     }
-    catch{
+    catch {
         throw
     }
 }
 
-function CreateUpdateApplicationAccessPolicy($appId, $appName, $certPath, $tenantName, $mailGroupAlias){
+function CreateRegistrationAdminApp($appName, $certFolder, $certName, $certPassword) {
+    try {
+        $requiredResourceAccess = GenerateApplicationApiPermissionsAdminApp
+        $app = CreateApplication $appName -requiredResourceAccess $requiredResourceAccess
+        $appId = $app.AppId
+        Write-Host "Registered app" $appId -ForegroundColor Green
+
+        Write-Progress "Generating certificate dates"
+        $dateFormat = (Get-Culture).DateTimeFormat.ShortDatePattern
+        $certStartDate = (Get-Date).ToString($dateFormat)
+        $certEndDate = ([DateTime]::Now).AddYears(5).ToString($dateFormat)
+
+        CreateCertificate -appId $appId -certFolder $certFolder -certName $certName -certPassword $certPassword -certStartDate $certStartDate -certEndDate $certEndDate
+        Write-Host "Certificate created" -ForegroundColor Green
+        $servicePrincipalId = GetOrCreateServicePrincipal  -appId $appId 
+        $spAppId = '00000003-0000-0000-c000-000000000000' #Graph API
+        $permissionServicePrincipalId = GetServicePrincipalIdByAppId -spAppId $spAppId
+        $roles = GetMicrosoftGraphPermissionsRolesAdminApp
+        GrantAppRoleAssignmentToServicePrincipal -appServicePrincipalId $servicePrincipalId -permissionServicePrincipalId $permissionServicePrincipalId -roles $roles
+        $certPath = $certFolder + "\" + $certName + ".pfx"
+        #--------------------------- END GRANT ADMIN CONSENT -------------------------
+        OutPutFile -app $app -certPath $certPath -certPassword $certPassword
+        return New-Object -TypeName PSObject -Property @{     
+            'App'      = $app
+            'CertPath' = $certPath
+        }
+    }
+    catch {
+        throw
+    }
+}
+
+function OutPutFile($app, $certPath, $certPassword, $policy) {
+    $nl = [Environment]::NewLine
+    $output = ($nl + $nl + "Client ID: " + $app.AppId + ", App Name: " + $app.DisplayName)
+    $output += ($nl + "Certificate Path: " + $certPath)
+    $output += ($nl + "Certificate Password: " + $certPassword)
+    if ($policy) {
+        $output += ($nl + "Policy Created for: " + $policy.ScopeName + " with " + $policy.AccessRight)
+    }
+    $output = $nl + $nl + "Azure AD application registered." + $output
+    Write-Host $output -ForegroundColor Green
+    $output | Out-File -FilePath "$certFolder\$($app.DisplayName)$($app.PublishName).txt"
+}
+
+function CreateUpdateApplicationAccessPolicy($appId, $appName, $certPath, $tenantName, $mailGroupAlias) {
     $AppPolicies = Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue
-    if($AppPolicies){
-        foreach ($policie in $AppPolicies)
-        {
-            if($policie.AppId -eq $appId){
+    if ($AppPolicies) {
+        foreach ($policie in $AppPolicies) {
+            if ($policie.AppId -eq $appId) {
                 Write-Host "Removing Application Access Policy for: $appId" -ForegroundColor Green 
                 Remove-ApplicationAccessPolicy -Identity $policie.Identity
             }
@@ -550,19 +623,15 @@ function CreateUpdateApplicationAccessPolicy($appId, $appName, $certPath, $tenan
     return $policy
 }
 
-function ApplyLimitedMailPolicy($appId, $appName, $certPath, $certPassword, $tenantName, $mailGroupAlias){
+function ApplyLimitedMailPolicy($appId, $appName, $certPath, $certPassword, $tenantName, $mailGroupAlias) {
     Write-Host "Waiting..."
-    Start-Sleep -Seconds 15
+    Start-Sleep -Seconds 20
     if ($certPassword) {
         $securePassword = ConvertTo-SecureString $certPassword -AsPlainText -Force
         Connect-ExchangeOnline -CertificateFilePath $certPath -CertificatePassword $securePassword -AppId $appId  -Organization $tenantName -ShowBanner:$false
-    }else{
-        Connect-ExchangeOnline -CertificateFilePath $certPath -AppId $appId  -Organization $tenantName -ShowBanner:$false
     }
-
-    
-    if(!$mailGroupAlias){
-        $mailGroupAlias = $appName 
+    else {
+        Connect-ExchangeOnline -CertificateFilePath $certPath -AppId $appId  -Organization $tenantName -ShowBanner:$false
     }
 
     $distributionGroup = GetCreateMailGroup -mailGroupAlias $mailGroupAlias
@@ -570,11 +639,12 @@ function ApplyLimitedMailPolicy($appId, $appName, $certPath, $certPassword, $ten
     return $policy
 }
 
-function GetCreateMailGroup($mailGroupAlias){
+function GetCreateMailGroup($mailGroupAlias) {
     $distributionGroup = Get-DistributionGroup -Identity $mailGroupAlias -ErrorAction SilentlyContinue
-    if($distributionGroup){
+    if ($distributionGroup) {
         Write-Host "Found Group: " $distributionGroup.PrimarySmtpAddress -ForegroundColor Green
-    }else{
+    }
+    else {
         Write-Host "Creating Distribution Group: $mailGroupAlias" -ForegroundColor Green
         $distributionGroup = New-DistributionGroup -Name $mailGroupAlias -Alias $mailGroupAlias  -Type security -Description “Restricted group for App $appName ($appId)"
     }
@@ -584,45 +654,51 @@ function GetCreateMailGroup($mailGroupAlias){
 function ApplyExchangeAdminRole($servicePrincipalId) {
     Write-Progress "Applying exchange admin roll to application"
     try {
-      $id = Get-MgServicePrincipalMemberOf -ServicePrincipalId $servicePrincipalId -ErrorAction SilentlyContinue
-      if(!$id) {
-        #Exchange Administrator
-        $directoryRoleId = (Get-MgDirectoryRole -Filter "RoleTemplateId eq '29232cdf-9323-42fd-ade2-1d097af3e4de'").Id 
-        New-MgDirectoryRoleMemberByRef -DirectoryRoleId $directoryRoleId  -OdataId "https://graph.microsoft.com/v1.0/directoryObjects/$servicePrincipalId"
-      }
-    } catch {
-      Write-Host "Exchange admin already applied" -ForegroundColor Yellow
+        $id = Get-MgServicePrincipalMemberOf -ServicePrincipalId $servicePrincipalId -ErrorAction SilentlyContinue
+        if (!$id) {
+            #Exchange Administrator
+            $directoryRoleId = (Get-MgDirectoryRole -Filter "RoleTemplateId eq '29232cdf-9323-42fd-ade2-1d097af3e4de'").Id 
+            New-MgDirectoryRoleMemberByRef -DirectoryRoleId $directoryRoleId  -OdataId "https://graph.microsoft.com/v1.0/directoryObjects/$servicePrincipalId"
+        }
     }
+    catch {
+        Write-Host "Exchange admin already applied" -ForegroundColor Yellow
+    }
+}
+
+function ProcessEmailDrive($certFolder, $mailGroupAlias, $adminAppClientId, $tenantId, $adminAppCertificate, $clientAppId) {
+    
+    $certFolder = "C:\Projects\cloudm-public\Migrate\PowerShell"
+    Set-Location -Path $certFolder
+    .\ProcessEmailDrive.ps1 -certFolder $certFolder -mailGroupAlias $mailGroupAlias -adminAppClientId $adminAppClientId -tenantId $tenantId -adminAppCertificate $adminAppCertificate -clientAppId $clientAppId
 }
 
 function CreateAzureAppRegistration() {
     $certPassword = Read-Host 'Enter Your Certificate Password:' 
     $location = Read-Host 'Enter the file location to save certificate:'
     $appName = Read-Host 'Enter the application Name'
-	$azureEnvironment = Read-Host "Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
+    $azureEnvironment = Read-Host "Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
     $limitedScopePrompt = Read-Host 'Type 0 for default scopes or 1 for limited scopes'
     $limitedScope = switch ($limitedScopePrompt) {
-        '1'   { $true }
-        '0'    { $false }
+        '1' { $true }
+        '0' { $false }
         default { $false }
     }
     Write-Host 'Do you want to login to Graph interactively (recommended if you are running the script manually) or with a Graph token?';
     $interactiveLogin = Read-Host 'Type 0 for interactive login, 1 for a login with a Graph Token'
      
-	$token = '';
-	if($interactiveLogin -eq 1){
-		$token = Read-Host 'Please enter the Graph Token'
-	}
-	else{
-		Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
-	}
-
-    try
-    {
-	    CreateAppRegistration -token $token -certFolder $location -certPassword $certPassword -userOutput $true  -appName $appName -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment -limitedScope $limitedScope
+    $token = '';
+    if ($interactiveLogin -eq 1) {
+        $token = Read-Host 'Please enter the Graph Token'
     }
-    finally
-    {
+    else {
+        Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
+    }
+
+    try {
+        CreateAppRegistration -token $token -certFolder $location -certPassword $certPassword -userOutput $true  -appName $appName -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment -limitedScope $limitedScope
+    }
+    finally {
         Disconnect-MgGraph -ErrorAction SilentlyContinue
         Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
     }
