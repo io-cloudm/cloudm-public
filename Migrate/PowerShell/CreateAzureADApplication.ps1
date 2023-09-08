@@ -628,22 +628,3 @@ function CreateAzureAppRegistration() {
         Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
     }
 }
-try {
-    $certPassword = "Ash28279!"
-    if ($certPassword) {
-        $securePassword = ConvertTo-SecureString $certPassword -AsPlainText -Force
-    }
-    else {
-        $securePassword = (new-object System.Security.SecureString)
-    }
-    #CreateAzureAppRegistration
-    CreateAppRegistration -workFolder "C:\Projects\cloudm-public\Migrate\PowerShell" -certPassword $securePassword -appName "LimitedTestApp" -azureEnvironment "0" -limitedScope $true
-    #CreateAppRegistration -workFolder "C:\Users\AshleyBrazier\Documents\CloudConfig" -certPassword "" -appName "AshleyDev" -useInteractiveLogin 0 -azureEnvironment "0" -limitedScope $false -userOutput $true
-
-}
-finally {
-    Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
-    Write-Host "Disconnect-MgGraph"
-    Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-    Write-Host "Disconnect-ExchangeOnline"
-}
