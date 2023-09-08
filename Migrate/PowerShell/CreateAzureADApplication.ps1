@@ -440,7 +440,7 @@ function CreateAppRegistration(
     try {
         # Import/Install required modules
         Write-Host "Import Modules" -ForegroundColor Green
-        ImportCloudM -workFolder $workFolder -limitedScope $limitedScope
+        ImportCloudMModules -workFolder $workFolder -limitedScope $limitedScope
         # Ensure NuGet is installed
         Write-Progress "Ensuring NuGet is installed"
         Get-PackageProvider -Name "NuGet" -ForceBootstrap | Out-Null
@@ -515,23 +515,35 @@ function CreateAppRegistration(
             $tenantId = (Get-MgDomain | Where-Object { $_.isInitial }).Id
             ProcessCsv -workFolder $workFolder -certPassword $certPassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId 
             OutPutFile -app $adminApp.App -certPath $adminApp.CertPath -certPassword $certPassword
+            MoveFiles -sourceFolder $workFolder -appName $adminApp.App.DisplayName
         }
         
         OutPutFile -app $app -certPath $certPath -certPassword $certPassword -policy $policy
-
+        MoveFiles -sourceFolder $workFolder -appName $app.DisplayName
     }
     catch {
         throw
     }
 }
 
-function ImportCloudM  ([string]$workFolder, [bool]$limitedScope) {
+function MoveFiles($sourceFolder, $appName) {
+    $destinationPath = Join-Path -Path $sourceFolder -ChildPath $appName 
+    New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
+    Get-ChildItem -File -Recurse -Path $sourceFolder |
+    ForEach-Object {
+        if ($_.Name -match "^$($appName)") {
+            Move-Item -Path $_.FullName -Destination $destinationPath -Force
+        }
+    }
+} 
+
+function ImportCloudMModules  ([string]$workFolder, [bool]$limitedScope) {
     $retryPms1 = Join-Path -Path $workFolder -ChildPath "Retry.psm1" 
     if (!(Test-Path -Path $retryPms1 -PathType Leaf)) {
         throw (New-Object System.IO.FileNotFoundException("File not found: $retryPms1", $retryPms1))
     }
     else {
-        Import-Module .\Retry -Force -Verbose
+        Import-Module .\Retry -Force
     }
     if ($limitedScope) {
         $processEmailDrive = Join-Path -Path $workFolder -ChildPath "ProcessEmailDrive.psm1" 
@@ -539,7 +551,7 @@ function ImportCloudM  ([string]$workFolder, [bool]$limitedScope) {
             throw (New-Object System.IO.FileNotFoundException("File not found: $processEmailDrive", $processEmailDrive))
         }
         else {
-            Import-Module .\ProcessEmailDrive -Force -Verbose
+            Import-Module .\ProcessEmailDrive -Force
         }
     }
 }

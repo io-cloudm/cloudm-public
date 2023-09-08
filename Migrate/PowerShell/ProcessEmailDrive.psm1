@@ -13,7 +13,7 @@ enum ItemType {
     Email
     EmailDrive
 }
-function GetMailGroup($mailGroupAlias) {
+function GetMailGroup([parameter(mandatory)][string]$mailGroupAlias) {
     $distributionGroup = Get-DistributionGroup -Identity $mailGroupAlias -ErrorAction SilentlyContinue
     if ($distributionGroup) {
         Write-Host "Found Group: " $distributionGroup.PrimarySmtpAddress
@@ -25,7 +25,9 @@ function GetMailGroup($mailGroupAlias) {
     return $distributionGroup;
 }
 
-function ProcessEmail ($row, $mailGroupAlias, $attempt) {
+function ProcessEmail ([parameter(mandatory)][System.Object]$row, 
+    [parameter(mandatory)][string] $mailGroupAlias, 
+    $attempt) {
     Write-Host "Processing Email : $($row.Email)"
     if ($script:distributionGroup -eq $false -and $attempt -ge 1) {
         Write-Host "$($mailGroupAlias) does not exist" -ForegroundColor Red
@@ -67,7 +69,9 @@ function ProcessEmail ($row, $mailGroupAlias, $attempt) {
 
 }
 
-function ProcessDrive ($row, $clientAppId, $adminCentreConnection, $sharePointConnection) {
+function ProcessDrive ([parameter(mandatory)][System.Object]$row, 
+    [parameter(mandatory)][string]$clientAppId) {
+
     Write-Host "Processing Drive : $($row.Email)"
     $driveUrl = $null
     try {
@@ -98,7 +102,8 @@ function ProcessDrive ($row, $clientAppId, $adminCentreConnection, $sharePointCo
     }
 }
 
-function HasError ($row, $ProcessDriveError) {
+function HasError ([parameter(mandatory)][System.Object]$row, 
+    [parameter(mandatory)][System.Object]$ProcessDriveError) {
     if ($ProcessDriveError.Count -ge 1) {
         Write-Host "Failed to add $($row.Email). The message was: $($ProcessDriveError[0].Exception)" -ForegroundColor Red
         $row.DriveStatus = $($FAILED)
@@ -109,7 +114,9 @@ function HasError ($row, $ProcessDriveError) {
     return $false
 }
 
-function BuildPermission($applicationId, $applicationDisplayName, $roles) {
+function BuildPermission([parameter(mandatory)][string]$applicationId, 
+    [parameter(mandatory)][string]$applicationDisplayName, 
+    [parameter(mandatory)][string[]]$roles) {
     $params = @{
         roles               = $roles
         grantedToIdentities = @(
@@ -124,11 +131,13 @@ function BuildPermission($applicationId, $applicationDisplayName, $roles) {
     return $params
 }
 
-function BuildPermissionMessage ($permission, $siteId, $siteUrl) {
+function BuildPermissionMessage ([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphPermission]$permission, 
+    [parameter(mandatory)][string]$siteId, 
+    [parameter(mandatory)][string]$siteUrl) {
     return "Site Id: $($siteId), Permission Id: $($permission.Id), Roles: $($permission.Roles), Site Url: $($siteUrl)"
 }
 
-function GetDriveUrl($webUrl) {
+function GetDriveUrl([parameter(mandatory)][string]$webUrl) {
     $index = $webUrl.LastIndexOf('/') 
     if ($index -ne -1) {
     
@@ -136,6 +145,7 @@ function GetDriveUrl($webUrl) {
     }
     return $webUrl
 }
+
 function ProcessRootSite() {
     $site = {
         Get-MgSite -SiteId "Root" -Property $SITE_PROPERTY_REQUEST -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
@@ -147,9 +157,10 @@ function ProcessRootSite() {
         CheckIfErrors -errorToProcess $ErrorResult
     } | Retry -timeoutInSecs 2 -retryCount 10 -context "New-MgSitePermission: $($site.Id)"
     Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
-    return $site
+    return [Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site
 }
-function ProcessMySite($site) {
+
+function ProcessMySite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site) {
     $siteId = GetMySiteHost -id $site.Id
     $site = { 
         Get-MgSite -SiteId $siteId -Property $SITE_PROPERTY_REQUEST -ErrorVariable ErrorResult
@@ -163,7 +174,7 @@ function ProcessMySite($site) {
     Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
 }
 
-function GetMySiteHost([parameter(mandatory)] [string]$id) {
+function GetMySiteHost([parameter(mandatory)][string]$id) {
     
     $index = $id.IndexOf(',') 
     $mySiteHost = $null
@@ -178,7 +189,13 @@ function GetMySiteHost([parameter(mandatory)] [string]$id) {
     return $mySiteHost
 }
 
-function CreateUpdateApplicationAccessPolicy($appId, $appName, $certPath, $tenantName, $mailGroupAlias) {
+function CreateUpdateApplicationAccessPolicy(
+    [parameter(mandatory)][string]$appId,
+    [parameter(mandatory)][string]$appName, 
+    [parameter(mandatory)][string]$certPath, 
+    [parameter(mandatory)][string]$tenantName, 
+    [parameter(mandatory)][string]$mailGroupAlias
+) {
     $appPolicies = { 
         Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
         CheckIfErrors -errorToProcess $ErrorResult
@@ -204,7 +221,12 @@ function CreateUpdateApplicationAccessPolicy($appId, $appName, $certPath, $tenan
     return $policy
 }
 
-function ApplyLimitedMailPolicy($appId, $appName, $certPath, [SecureString] $certPassword, $tenantName, $mailGroupAlias) {
+function ApplyLimitedMailPolicy([parameter(mandatory)][string]$appId, 
+    [parameter(mandatory)][string]$appName, 
+    [parameter(mandatory)][string]$certPath, 
+    [parameter(mandatory)][string]$tenantName, 
+    [parameter(mandatory)][string]$mailGroupAlias,
+    [SecureString] $certPassword) {
     {
         Connect-ExchangeOnline -CertificateFilePath $certPath -CertificatePassword $certPassword -AppId $appId  -Organization $tenantName -ShowBanner:$false -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
         CheckIfErrors -errorToProcess $ErrorResult
@@ -214,7 +236,7 @@ function ApplyLimitedMailPolicy($appId, $appName, $certPath, [SecureString] $cer
     return $policy
 }
 
-function GetCreateMailGroup($mailGroupAlias) {
+function GetCreateMailGroup([parameter(mandatory)][string]$mailGroupAlias) {
     $distributionGroup = Get-DistributionGroup -Identity $mailGroupAlias -ErrorAction SilentlyContinue
     if ($distributionGroup) {
         Write-Host "$($distributionGroup.PrimarySmtpAddress) already exists." -ForegroundColor Yellow
@@ -227,9 +249,13 @@ function GetCreateMailGroup($mailGroupAlias) {
     return $distributionGroup;
 }
 
-
-
-function ProcessCsv ($workFolder, [SecureString] $certPassword, $mailGroupAlias, $adminAppClientId, $tenantId, $adminAppCertificate, $clientAppId) {
+function ProcessCsv ([parameter(mandatory)][string]$workFolder, 
+    [parameter(mandatory)][string]$mailGroupAlias, 
+    [parameter(mandatory)][string]$adminAppClientId, 
+    [parameter(mandatory)][string]$tenantId, 
+    [parameter(mandatory)][string]$adminAppCertificate, 
+    [parameter(mandatory)][string]$clientAppId,
+    [SecureString] $certPassword) {
     try {
         $file = Join-Path -Path $workFolder -ChildPath "Emails.csv" 
         if (!(Test-Path -Path $file -PathType Leaf)) {
@@ -255,7 +281,7 @@ function ProcessCsv ($workFolder, [SecureString] $certPassword, $mailGroupAlias,
             $itemType = [ItemType]$row.ItemType
             switch ($itemType) {
                 Drive {
-                    ProcessDrive -row $row -clientAppId  $clientAppId -adminCentreConnection $adminCentreConnection -sharePointConnection $sharePointConnection
+                    ProcessDrive -row $row -clientAppId  $clientAppId
                     break
                 }
                 EMail {
@@ -264,7 +290,7 @@ function ProcessCsv ($workFolder, [SecureString] $certPassword, $mailGroupAlias,
                 }
                 EmailDrive {
                     ProcessEmail -row $row -mailGroupAlias $mailGroupAlias -attempt $counter
-                    ProcessDrive -row $row -clientAppId  $clientAppId -adminCentreConnection $adminCentreConnection -sharePointConnection $sharePointConnection
+                    ProcessDrive -row $row -clientAppId  $clientAppId
                     break
                 }
                 default {
@@ -278,6 +304,8 @@ function ProcessCsv ($workFolder, [SecureString] $certPassword, $mailGroupAlias,
     finally {
         Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
         Write-Host "Disconnect-MgGraph $($CLOUDM_ADMIN_APP)"
+        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+        Write-Host "Disconnect-ExchangeOnline"
     }
 }
 
