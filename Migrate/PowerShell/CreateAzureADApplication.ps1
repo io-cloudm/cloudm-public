@@ -1,5 +1,5 @@
 ﻿#Requires -RunAsAdministrator
-
+$ErrorActionPreference = "Stop"
 function ImportModules($moduleName, $requiredVersion) {
     Write-Progress "Importing modules"
     #Install and Import Graph Module
@@ -28,24 +28,13 @@ function ImportModules($moduleName, $requiredVersion) {
             Write-Host "$moduleName Module installed successfully."
         }
         else {
-            Write-Progress "$moduleName Module Version $requiredVersion is already installed."
+            Write-Progress "$moduleName Module Version $requiredVersion is already installed." -Completed
         }
     }
     Write-Host "Importing $moduleName Module"
 
     Import-Module $moduleName -Scope Global -RequiredVersion $requiredVersion -ErrorAction SilentlyContinue
 } 
-
-function CreateConnection($token, $azureEnvironment) {
-    Write-Host "Connecting to MgGraph using an Access token"
-    $ae = switch ( $azureEnvironment ) {
-        0 { 'Global' }
-        1 { 'China' }
-        2 { 'USGov' }
-        3 { 'USGovDoD' }
-    }
-    Connect-MgGraph -Environment $ae -AccessToken $token -NoWelcome -ErrorAction Stop
-}
 
 function CreateInteractiveConnection($azureEnvironment) {
     Write-Host "Connecting to MgGraph using an Interactive login"
@@ -99,10 +88,6 @@ function CreateApplication($appNameProvided, $requiredResourceAccess) {
     Update-MgApplication -ApplicationId $app.Id -IdentifierUri @($appURI)
     return $app
 }
-
-
-
-
 
 #region Generate Permissions & Roles
 function GetSharepointApiPermissions([bool]$limitedScope) {
@@ -182,8 +167,6 @@ function GenerateApplicationApiPermissionsAdminApp() {
     $requiredResourceAccess = New-Object System.Collections.Generic.List[Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess]
     $graphAccess = GetMicrosoftGraphApiPermissionsAdminApp
     $requiredResourceAccess.Add($graphAccess)
-    $sharepointAccess = GetSharepointApiPermissionsAdminApp
-    $requiredResourceAccess.Add($sharepointAccess)
     return $requiredResourceAccess;
 }
 
@@ -197,17 +180,6 @@ function GetMicrosoftGraphPermissionsRolesAdminApp() {
     $roles = @(
         "a82116e5-55eb-4c41-a434-62fe8a61c773"
     )
-    return $roles
-}
-
-function GetSharepointApiPermissionsAdminApp() {
-    $sharepointAppId = "00000003-0000-0ff1-ce00-000000000000"
-    $roles = GetSharepointPermissionsRolesAdminApp
-    return GenerateRequiredResourceAccess -resourceAppId $sharepointAppId -roles $roles
-}
-
-function GetSharepointPermissionsRolesAdminApp() {
-    $roles = @("df021288-bdef-4463-88db-98f22de89214", "678536fe-1083-478a-9c59-b99265e6b0d3")
     return $roles
 }
 #endregion
@@ -233,8 +205,29 @@ function GenerateResourceAccess($resourceId, $resourceType) {
     return $resourceAccess
 }
 
+function GenerateRequiredResourceAccess($resourceAppId, $roles) {
+    $requiredResourceAccess = New-Object Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess
+    $requiredResourceAccess.ResourceAppId = $resourceAppId
+    $requiredResourceAccessList = New-Object System.Collections.Generic.List[Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess]
+
+    #Add roles
+    foreach ($role in $roles) {
+        $resourceAccess = GenerateResourceAccess -resourceId $role -resourceType "Role"
+        $requiredResourceAccessList.Add($resourceAccess)
+    }
+    $requiredResourceAccess.ResourceAccess = $requiredResourceAccessList
+    return $requiredResourceAccess
+}
+
+function GenerateResourceAccess($resourceId, $resourceType) {
+    $resourceAccess = New-Object Microsoft.Graph.PowerShell.Models.MicrosoftGraphResourceAccess
+    $resourceAccess.Type = $resourceType
+    $resourceAccess.Id = $resourceId 
+    return $resourceAccess
+}
+
 #region Certificate
-function CreateCertificate($appId, $certFolder, $certName, $certPassword, $certStartDate, $certEndDate) {
+function CreateCertificate($appId, $workFolder, $certName, [SecureString] $certPassword, $certStartDate, $certEndDate) {
     Write-Progress "Creating certificate"
     
     $app = Get-MgApplication -Filter "AppId eq '$appId'"
@@ -253,12 +246,12 @@ function CreateCertificate($appId, $certFolder, $certName, $certPassword, $certS
 
     #Generate certificate
     if (CreateSelfSignedCertificate -certName $certName -startDate $certStartDate -endDate $certEndDate -forceCert $true) {
-        ExportPFXFile -certFolder $certFolder -certName $certName -certPassword $certPassword
+        ExportPFXFile -workFolder $workFolder -certName $certName -certPassword $certPassword
         RemoveCertsFromStore -certName $certName -store "my"
         RemoveCertsFromStore -certName $certName -store "ca"
     }
     # Upload a certificate if needed
-    $certData = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$certFolder\$certName.cer")
+    $certData = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$workFolder\$certName.cer")
     $keyCreds = @{ 
         Type  = "AsymmetricX509Cert";
         Usage = "Verify";
@@ -340,7 +333,7 @@ function CreateSelfSignedCertificate($certName, $startDate, $endDate, $forceCert
     $enrollment = new-object -com "X509Enrollment.CX509Enrollment.1"
     $enrollment.InitializeFromRequest($cert)
     $certdata = $enrollment.CreateRequest(0)
-    Write-Progress "Installing enrollment"
+    Write-Progress "Installing enrollment" -Completed
     $enrollment.InstallResponse(2, $certdata, 0, "")
     return $true
 }
@@ -369,25 +362,19 @@ function CheckDirectory($path) {
     }
 }
 
-function ExportPFXFile($certFolder, $certName, $certPassword) {
+function ExportPFXFile($workFolder, $certName, [SecureString] $certPassword) {
     Write-Progress "Exporting PFX"
     if ($certName.ToLower().StartsWith("cn=")) {
         # Remove CN from common name
         $certName = $certName.Substring(3)
     }
-    if ($certPassword) {
-        $securePassword = ConvertTo-SecureString $certPassword -AsPlainText -Force
-    }
-    else {
-        $securePassword = (new-object System.Security.SecureString)
-    }
     Write-Progress "Finding cert from store"
     $cert = Get-ChildItem -Path Cert:\LocalMachine\my | where-object { $_.Subject -eq "CN=$certName" }
     
     Write-Progress "Generating pfx file"
-    Export-PfxCertificate -Cert $cert -Password $securePassword -FilePath "$certFolder\$certName.pfx"
+    Export-PfxCertificate -Cert $cert -Password $securePassword -FilePath "$workFolder\$certName.pfx"
     Write-Progress "Generating cer file"
-    Export-Certificate -Cert $cert -Type CERT -FilePath "$certFolder\$certName.cer"
+    Export-Certificate -Cert $cert -Type CERT -FilePath "$workFolder\$certName.cer"
 }
 function RemoveCertsFromStore($certName, $store) {
     Write-Progress "Removing certs from store" $store
@@ -404,27 +391,6 @@ function RemoveCertsFromStore($certName, $store) {
 }
 #endregion
 
-function GenerateRequiredResourceAccess($resourceAppId, $roles) {
-    $requiredResourceAccess = New-Object Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess
-    $requiredResourceAccess.ResourceAppId = $resourceAppId
-    $requiredResourceAccessList = New-Object System.Collections.Generic.List[Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess]
-
-    #Add roles
-    foreach ($role in $roles) {
-        $resourceAccess = GenerateResourceAccess -resourceId $role -resourceType "Role"
-        $requiredResourceAccessList.Add($resourceAccess)
-    }
-    $requiredResourceAccess.ResourceAccess = $requiredResourceAccessList
-    return $requiredResourceAccess
-}
-
-function GenerateResourceAccess($resourceId, $resourceType) {
-    $resourceAccess = New-Object Microsoft.Graph.PowerShell.Models.MicrosoftGraphResourceAccess
-    $resourceAccess.Type = $resourceType
-    $resourceAccess.Id = $resourceId 
-    return $resourceAccess
-}
-
 function GetOrCreateServicePrincipal($appId) {
     Write-Progress "Looking for existing service principal"
     $servicePrincipal = Get-MgServicePrincipal -Filter "AppId eq '$($appId)'"
@@ -434,9 +400,11 @@ function GetOrCreateServicePrincipal($appId) {
     }
     return $servicePrincipal.Id
 }
+
 function GetServicePrincipalIdByAppId($spAppId) {
     Write-Progress "Getting ServicePrincipal Id for $spAppId "
     $servicePrincipal = Get-MgServicePrincipal -Filter "AppId eq '$spAppId'"
+    Write-Progress "Getting ServicePrincipal Id for $spAppId Conpleted" -Completed
     return $servicePrincipal.Id;
 }
 
@@ -456,14 +424,23 @@ function GrantAppRoleAssignmentToServicePrincipal($appServicePrincipalId, $permi
     }
 }
 
-function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $userOutput, $appName, $useInteractiveLogin, $azureEnvironment, [bool]$limitedScope, $mailGroupAlias) {
+function CreateAppRegistration( 
+    [parameter(mandatory)] [string]$workFolder,
+    [parameter(mandatory)] [string]$appName,
+    [SecureString]$certPassword, 
+    [string]$azureEnvironment, 
+    [bool]$limitedScope, 
+    [string]$mailGroupAlias) {
     Write-Progress ("Running as " + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
     # Validate directory
-    CheckDirectory -path $certFolder
+    CheckDirectory -path $workFolder
+    $appName = CleanAppName -value $appName
+    Set-Location -Path $workFolder
 
     try {
         # Import/Install required modules
         Write-Host "Import Modules" -ForegroundColor Green
+        ImportCloudM -workFolder $workFolder -limitedScope $limitedScope
         # Ensure NuGet is installed
         Write-Progress "Ensuring NuGet is installed"
         Get-PackageProvider -Name "NuGet" -ForceBootstrap | Out-Null
@@ -474,25 +451,16 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
             ImportModules -moduleName Microsoft.Graph.Files -requiredVersion 2.4.0
             ImportModules -moduleName Microsoft.Graph.Sites -requiredVersion 2.4.0
         }
-
-        # Connect to Mg-Graph using a pre-generated access token
-        if ($useInteractiveLogin -eq 0) {
-            CreateInteractiveConnection -azureEnvironment $azureEnvironment
-        }
-        else {
-            CreateConnection -token $token  -azureEnvironment $azureEnvironment
-        }
+        CreateInteractiveConnection -azureEnvironment $azureEnvironment
            
         Write-Host "Connected" -ForegroundColor Green
         $requiredResourceAccess = GenerateApplicationApiPermissions -limitedScope $limitedScope
         # Create Application
         $app = CreateApplication $appName -requiredResourceAccess $requiredResourceAccess
         $appId = $app.AppId
-        Write-Host "Registered app" $appId -ForegroundColor Green
-
-        if (!$certName) {
-            $certName = $appName + "-" + $app.PublisherDomain
-        }
+        Write-Host "Registered app $($appName) - ($($appId))"  -ForegroundColor Green
+        $certName = $appName + "-" + $app.PublisherDomain
+        
 
         # Create certificate
         # Generate dates
@@ -501,19 +469,18 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         $certStartDate = (Get-Date).ToString($dateFormat)
         $certEndDate = ([DateTime]::Now).AddYears(5).ToString($dateFormat)
 
-        CreateCertificate -appId $appId -certFolder $certFolder -certName $certName -certPassword $certPassword -certStartDate $certStartDate -certEndDate $certEndDate
-        Write-Host "Certificate created" -ForegroundColor Green
+        CreateCertificate -appId $appId -workFolder $workFolder -certName $certName -certPassword $certPassword -certStartDate $certStartDate -certEndDate $certEndDate | Out-Null
+        Write-Host "Certificate created. $($appName) - ($($appId))" -ForegroundColor Green
 
         # Create Service principal
         $servicePrincipalId = GetOrCreateServicePrincipal  -appId $appId 
-        Write-Host "Service principal created" -ForegroundColor Green
+        Write-Host "Service principal created. $($appName) - ($($appId))" -ForegroundColor Green
 
         #Assign exchange online admin roll
+        Write-Progress "Applying Application Roles"
         ApplyExchangeAdminRole -servicePrincipalId $servicePrincipalId
-        Write-Progress "Exchange admin roll applied"
-        $certPath = $certFolder + "\" + $certName + ".pfx"
-
-
+        Write-Host "Exchange admin roll applied. $($appName) - ($($appId))" -ForegroundColor Green
+        $certPath = $workFolder + "\" + $certName + ".pfx"
         # ---------------------  GRANT ADMIN CONSENT ---------------------------------
 
         #Get the Permission ServicePrincipalId for Graph
@@ -536,25 +503,20 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
         $roles = GetExchangePermissionsRoles
         #Grant Admin consent to permissions for Exchange APIs
         GrantAppRoleAssignmentToServicePrincipal -appServicePrincipalId $servicePrincipalId -permissionServicePrincipalId $permissionServicePrincipalId -roles $roles
-
+        Write-Progress "Applying Application Roles" -Completed
         #--------------------------- END GRANT ADMIN CONSENT -------------------------
-
-        # Return appid if user friendly output is disabled
-        if (!$userOutput) {
-            return $appId
-        }
-        
-        $policy
+        $policy = $null
         if ($limitedScope) {
             if (!$mailGroupAlias) {
                 $mailGroupAlias = $appName 
             }
             $policy = ApplyLimitedMailPolicy -appId $appId -certPath $certPath -certPassword $certPassword -tenantName $app.PublisherDomain -appName $appName -mailGroupAlias $mailGroupAlias
-            $adminApp = CreateRegistrationAdminApp -appName "CloudM Admin App" -certFolder $certFolder -certName "CloudM Admin App" -certPassword $certPassword
+            $adminApp = CreateRegistrationAdminApp -appName "CloudM Admin App" -workFolder $workFolder -certName "CloudM Admin App" -certPassword $certPassword
             $tenantId = (Get-MgDomain | Where-Object { $_.isInitial }).Id
-            ProcessEmailDrive -certFolder $certFolder -mailGroupAlias $mailGroupAlias -adminAppCertificate $adminApp.CertPath -adminAppClientId $adminApp.App.AppId -tenantId $tenantId  -clientAppId  $appId
+            ProcessCsv -workFolder $workFolder -certPassword $certPassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId 
+            OutPutFile -app $adminApp.App -certPath $adminApp.CertPath -certPassword $certPassword
         }
-
+        
         OutPutFile -app $app -certPath $certPath -certPassword $certPassword -policy $policy
 
     }
@@ -563,28 +525,50 @@ function CreateAppRegistration($token, $certFolder, $certName, $certPassword, $u
     }
 }
 
-function CreateRegistrationAdminApp($appName, $certFolder, $certName, $certPassword) {
+function ImportCloudM  ([string]$workFolder, [bool]$limitedScope) {
+    $retryPms1 = Join-Path -Path $workFolder -ChildPath "Retry.psm1" 
+    if (!(Test-Path -Path $retryPms1 -PathType Leaf)) {
+        throw (New-Object System.IO.FileNotFoundException("File not found: $retryPms1", $retryPms1))
+    }
+    else {
+        Import-Module .\Retry -Force -Verbose
+    }
+    if ($limitedScope) {
+        $processEmailDrive = Join-Path -Path $workFolder -ChildPath "ProcessEmailDrive.psm1" 
+        if (!(Test-Path -Path $processEmailDrive -PathType Leaf)) {
+            throw (New-Object System.IO.FileNotFoundException("File not found: $processEmailDrive", $processEmailDrive))
+        }
+        else {
+            Import-Module .\ProcessEmailDrive -Force -Verbose
+        }
+    }
+}
+
+function CleanAppName($value) {
+    $Pattern = "[^a-zA-Z0-9\s]"
+    return ($value -replace $Pattern -replace '(^\s+|\s+$)', ' ' -replace '\s+', '')
+}
+
+function CreateRegistrationAdminApp($appName, $workFolder, $certName, [SecureString] $certPassword) {
     try {
         $requiredResourceAccess = GenerateApplicationApiPermissionsAdminApp
         $app = CreateApplication $appName -requiredResourceAccess $requiredResourceAccess
         $appId = $app.AppId
-        Write-Host "Registered app" $appId -ForegroundColor Green
+        Write-Host "Registered app $($appName) - ($($appId))"  -ForegroundColor Green
 
-        Write-Progress "Generating certificate dates"
+        Write-Progress "Generating certificate dates. $($appName) - ($($appId))"
         $dateFormat = (Get-Culture).DateTimeFormat.ShortDatePattern
         $certStartDate = (Get-Date).ToString($dateFormat)
         $certEndDate = ([DateTime]::Now).AddYears(5).ToString($dateFormat)
 
-        CreateCertificate -appId $appId -certFolder $certFolder -certName $certName -certPassword $certPassword -certStartDate $certStartDate -certEndDate $certEndDate
-        Write-Host "Certificate created" -ForegroundColor Green
+        CreateCertificate -appId $appId -workFolder $workFolder -certName $certName -certPassword $certPassword -certStartDate $certStartDate -certEndDate $certEndDate
+        Write-Host "Certificate created. $($appName) - ($($appId))" -ForegroundColor Green
         $servicePrincipalId = GetOrCreateServicePrincipal  -appId $appId 
         $spAppId = '00000003-0000-0000-c000-000000000000' #Graph API
         $permissionServicePrincipalId = GetServicePrincipalIdByAppId -spAppId $spAppId
         $roles = GetMicrosoftGraphPermissionsRolesAdminApp
         GrantAppRoleAssignmentToServicePrincipal -appServicePrincipalId $servicePrincipalId -permissionServicePrincipalId $permissionServicePrincipalId -roles $roles
-        $certPath = $certFolder + "\" + $certName + ".pfx"
-        #--------------------------- END GRANT ADMIN CONSENT -------------------------
-        OutPutFile -app $app -certPath $certPath -certPassword $certPassword
+        $certPath = $workFolder + "\" + $certName + ".pfx"
         return New-Object -TypeName PSObject -Property @{     
             'App'      = $app
             'CertPath' = $certPath
@@ -595,60 +579,17 @@ function CreateRegistrationAdminApp($appName, $certFolder, $certName, $certPassw
     }
 }
 
-function OutPutFile($app, $certPath, $certPassword, $policy) {
+function OutPutFile($app, $certPath, [SecureString] $certPassword, $policy) {
     $nl = [Environment]::NewLine
     $output = ($nl + $nl + "Client ID: " + $app.AppId + ", App Name: " + $app.DisplayName)
     $output += ($nl + "Certificate Path: " + $certPath)
-    $output += ($nl + "Certificate Password: " + $certPassword)
+    $output += ($nl + "Certificate Password: " + [System.Net.NetworkCredential]::new("", $certPassword).Password)
     if ($policy) {
         $output += ($nl + "Policy Created for: " + $policy.ScopeName + " with " + $policy.AccessRight)
     }
     $output = $nl + $nl + "Azure AD application registered." + $output
     Write-Host $output -ForegroundColor Green
-    $output | Out-File -FilePath "$certFolder\$($app.DisplayName)$($app.PublishName).txt"
-}
-
-function CreateUpdateApplicationAccessPolicy($appId, $appName, $certPath, $tenantName, $mailGroupAlias) {
-    $AppPolicies = Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue
-    if ($AppPolicies) {
-        foreach ($policie in $AppPolicies) {
-            if ($policie.AppId -eq $appId) {
-                Write-Host "Removing Application Access Policy for: $appId" -ForegroundColor Green 
-                Remove-ApplicationAccessPolicy -Identity $policie.Identity
-            }
-        }
-    }
-    Write-Host "Creating Policy for: $mailGroupAlias" -ForegroundColor Green
-    $policy = New-ApplicationAccessPolicy -AppId $appId -PolicyScopeGroupId $mailGroupAlias -AccessRight RestrictAccess  -Description “Restricted policy for App $appName ($appId)" 
-    return $policy
-}
-
-function ApplyLimitedMailPolicy($appId, $appName, $certPath, $certPassword, $tenantName, $mailGroupAlias) {
-    Write-Host "Waiting..."
-    Start-Sleep -Seconds 20
-    if ($certPassword) {
-        $securePassword = ConvertTo-SecureString $certPassword -AsPlainText -Force
-        Connect-ExchangeOnline -CertificateFilePath $certPath -CertificatePassword $securePassword -AppId $appId  -Organization $tenantName -ShowBanner:$false
-    }
-    else {
-        Connect-ExchangeOnline -CertificateFilePath $certPath -AppId $appId  -Organization $tenantName -ShowBanner:$false
-    }
-
-    $distributionGroup = GetCreateMailGroup -mailGroupAlias $mailGroupAlias
-    $policy = CreateUpdateApplicationAccessPolicy -appId $appId -appName $appName -certPath $certPath -tenantName $tenantName -mailGroupAlias $distributionGroup.PrimarySmtpAddress
-    return $policy
-}
-
-function GetCreateMailGroup($mailGroupAlias) {
-    $distributionGroup = Get-DistributionGroup -Identity $mailGroupAlias -ErrorAction SilentlyContinue
-    if ($distributionGroup) {
-        Write-Host "Found Group: " $distributionGroup.PrimarySmtpAddress -ForegroundColor Green
-    }
-    else {
-        Write-Host "Creating Distribution Group: $mailGroupAlias" -ForegroundColor Green
-        $distributionGroup = New-DistributionGroup -Name $mailGroupAlias -Alias $mailGroupAlias  -Type security -Description “Restricted group for App $appName ($appId)"
-    }
-    return $distributionGroup;
+    $output | Out-File -FilePath "$workFolder\$($app.DisplayName)$($app.PublishName).txt"
 }
 
 function ApplyExchangeAdminRole($servicePrincipalId) {
@@ -666,13 +607,6 @@ function ApplyExchangeAdminRole($servicePrincipalId) {
     }
 }
 
-function ProcessEmailDrive($certFolder, $mailGroupAlias, $adminAppClientId, $tenantId, $adminAppCertificate, $clientAppId) {
-    
-    $certFolder = "C:\Projects\cloudm-public\Migrate\PowerShell"
-    Set-Location -Path $certFolder
-    .\ProcessEmailDrive.ps1 -certFolder $certFolder -mailGroupAlias $mailGroupAlias -adminAppClientId $adminAppClientId -tenantId $tenantId -adminAppCertificate $adminAppCertificate -clientAppId $clientAppId
-}
-
 function CreateAzureAppRegistration() {
     $certPassword = Read-Host 'Enter Your Certificate Password:' 
     $location = Read-Host 'Enter the file location to save certificate:'
@@ -684,25 +618,32 @@ function CreateAzureAppRegistration() {
         '0' { $false }
         default { $false }
     }
-    Write-Host 'Do you want to login to Graph interactively (recommended if you are running the script manually) or with a Graph token?';
-    $interactiveLogin = Read-Host 'Type 0 for interactive login, 1 for a login with a Graph Token'
-     
-    $token = '';
-    if ($interactiveLogin -eq 1) {
-        $token = Read-Host 'Please enter the Graph Token'
-    }
-    else {
-        Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
-    }
+    Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
 
     try {
-        CreateAppRegistration -token $token -certFolder $location -certPassword $certPassword -userOutput $true  -appName $appName -useInteractiveLogin $interactiveLogin -azureEnvironment $azureEnvironment -limitedScope $limitedScope
+        CreateAppRegistration -token $token -workFolder $location -certPassword $certPassword -appName $appName -azureEnvironment $azureEnvironment -limitedScope $limitedScope
     }
     finally {
         Disconnect-MgGraph -ErrorAction SilentlyContinue
         Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
     }
 }
+try {
+    $certPassword = "Ash28279!"
+    if ($certPassword) {
+        $securePassword = ConvertTo-SecureString $certPassword -AsPlainText -Force
+    }
+    else {
+        $securePassword = (new-object System.Security.SecureString)
+    }
+    #CreateAzureAppRegistration
+    CreateAppRegistration -workFolder "C:\Projects\cloudm-public\Migrate\PowerShell" -certPassword $securePassword -appName "LimitedTestApp" -azureEnvironment "0" -limitedScope $true
+    #CreateAppRegistration -workFolder "C:\Users\AshleyBrazier\Documents\CloudConfig" -certPassword "" -appName "AshleyDev" -useInteractiveLogin 0 -azureEnvironment "0" -limitedScope $false -userOutput $true
 
-CreateAzureAppRegistration
-
+}
+finally {
+    Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+    Write-Host "Disconnect-MgGraph"
+    Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+    Write-Host "Disconnect-ExchangeOnline"
+}

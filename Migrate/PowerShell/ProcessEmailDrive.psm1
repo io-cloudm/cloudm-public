@@ -1,5 +1,4 @@
-﻿param ($workFolder, $mailGroupAlias, $adminAppClientId, $tenantId, $adminAppCertificate, $clientAppId, [SecureString] $certPassword)
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 New-Variable -Name NOT_APPLICABLE -Value  "N/A" -Option ReadOnly
 New-Variable -Name SUCCESS -Value  "Success" -Option ReadOnly
 New-Variable -Name FAILED -Value  "Failed" -Option ReadOnly
@@ -179,7 +178,58 @@ function GetMySiteHost([parameter(mandatory)] [string]$id) {
     return $mySiteHost
 }
 
-function ProcessCsv ($workFolder, [SecureString] $certPassword, $mailGroupAlias, $attempt, $adminAppClientId, $tenantId, $adminAppCertificate, $clientAppId) {
+function CreateUpdateApplicationAccessPolicy($appId, $appName, $certPath, $tenantName, $mailGroupAlias) {
+    $appPolicies = { 
+        Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
+        CheckIfErrors -errorToProcess $ErrorResult
+    } | Retry -timeoutInSecs 2 -retryCount 10 -context "Get Application Access Policy"
+    
+    $policyExists = $false
+    if ($appPolicies) {
+        foreach ($policie in $appPolicies) {
+            if ($policie.AppId -eq $appId) {
+                Write-Host "Access Policy already exists for: $appId" -ForegroundColor Yellow 
+                $policyExists = $true
+            }
+        }
+    }
+    if ($policyExists -eq $false) {
+        Write-Host "Creating Policy for: $mailGroupAlias"
+        $policy = { 
+            New-ApplicationAccessPolicy -AppId $appId -PolicyScopeGroupId $mailGroupAlias -AccessRight RestrictAccess  -Description “Restricted policy for App $appName ($appId)" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult 
+            CheckIfErrors -errorToProcess $ErrorResult
+        } | Retry -timeoutInSecs 2 -retryCount 10 -context "Create Application Access Policy"
+        Write-Host "Created Policy for: $mailGroupAlias with Id: $($policy.Id)" -ForegroundColor Green
+    }
+    return $policy
+}
+
+function ApplyLimitedMailPolicy($appId, $appName, $certPath, [SecureString] $certPassword, $tenantName, $mailGroupAlias) {
+    {
+        Connect-ExchangeOnline -CertificateFilePath $certPath -CertificatePassword $certPassword -AppId $appId  -Organization $tenantName -ShowBanner:$false -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
+        CheckIfErrors -errorToProcess $ErrorResult
+    } | Retry -timeoutInSecs 2 -retryCount 10 -context "Connect to Exchange Online"
+    $distributionGroup = GetCreateMailGroup -mailGroupAlias $mailGroupAlias
+    $policy = CreateUpdateApplicationAccessPolicy -appId $appId -appName $appName -certPath $certPath -tenantName $tenantName -mailGroupAlias $distributionGroup.PrimarySmtpAddress
+    return $policy
+}
+
+function GetCreateMailGroup($mailGroupAlias) {
+    $distributionGroup = Get-DistributionGroup -Identity $mailGroupAlias -ErrorAction SilentlyContinue
+    if ($distributionGroup) {
+        Write-Host "$($distributionGroup.PrimarySmtpAddress) already exists." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "Creating Distribution Group: $($mailGroupAlias)"
+        $distributionGroup = New-DistributionGroup -Name $mailGroupAlias -Alias $mailGroupAlias  -Type security -Description “Restricted group for App $appName ($appId)"
+        Write-Host "Created Distribution Group: $($mailGroupAlias)" -ForegroundColor Green
+    }
+    return $distributionGroup;
+}
+
+
+
+function ProcessCsv ($workFolder, [SecureString] $certPassword, $mailGroupAlias, $adminAppClientId, $tenantId, $adminAppCertificate, $clientAppId) {
     try {
         $file = Join-Path -Path $workFolder -ChildPath "Emails.csv" 
         if (!(Test-Path -Path $file -PathType Leaf)) {
@@ -196,7 +246,6 @@ function ProcessCsv ($workFolder, [SecureString] $certPassword, $mailGroupAlias,
 
         $site = ProcessRootSite
         ProcessMySite -site $site
-
         foreach ($row in $csv) {
             $row | Add-Member -NotePropertyName "EmailStatus" -NotePropertyValue $NOT_APPLICABLE -Force
             $row | Add-Member -NotePropertyName "EmailErrorMessage" -NotePropertyValue $NOT_APPLICABLE -Force
@@ -232,8 +281,9 @@ function ProcessCsv ($workFolder, [SecureString] $certPassword, $mailGroupAlias,
     }
 }
 
+Export-ModuleMember -Function ProcessCsv
+Export-ModuleMember -Function ApplyLimitedMailPolicy
 
-ProcessCsv -workFolder $workFolder -certPassword $certPassword -mailGroupAlias $mailGroupAlias -attempt 0 -adminAppClientId $adminAppClientId -tenantId $tenantId -adminAppCertificate $adminAppCertificate -clientAppId $clientAppId
     
   
         
