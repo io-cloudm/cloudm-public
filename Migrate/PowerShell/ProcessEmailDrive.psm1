@@ -13,7 +13,7 @@ enum ItemType {
     Email
     EmailDrive
 }
-function GetMailGroup([parameter(mandatory)][string]$mailGroupAlias) {
+function GetMailGroup([parameter(mandatory)][String]$mailGroupAlias) {
     $distributionGroup = Get-DistributionGroup -Identity $mailGroupAlias -ErrorAction SilentlyContinue
     if ($distributionGroup) {
         Write-Host "Found Group: " $distributionGroup.PrimarySmtpAddress
@@ -25,9 +25,7 @@ function GetMailGroup([parameter(mandatory)][string]$mailGroupAlias) {
     return $distributionGroup;
 }
 
-function ProcessEmail ([parameter(mandatory)][System.Object]$row, 
-    [parameter(mandatory)][string] $mailGroupAlias, 
-    $attempt) {
+function ProcessEmail ([parameter(mandatory)][System.Object]$row, [parameter(mandatory)][String] $mailGroupAlias, $attempt) {
     Write-Host "Processing Email : $($row.Email)"
     if ($script:distributionGroup -eq $false -and $attempt -ge 1) {
         Write-Host "$($mailGroupAlias) does not exist" -ForegroundColor Red
@@ -69,8 +67,7 @@ function ProcessEmail ([parameter(mandatory)][System.Object]$row,
 
 }
 
-function ProcessDrive ([parameter(mandatory)][System.Object]$row, 
-    [parameter(mandatory)][string]$clientAppId) {
+function ProcessDrive ([parameter(mandatory)][System.Object]$row, [parameter(mandatory)][String]$clientAppId) {
 
     Write-Host "Processing Drive : $($row.Email)"
     $driveUrl = $null
@@ -91,7 +88,7 @@ function ProcessDrive ([parameter(mandatory)][System.Object]$row,
     }
     catch {
         Write-Host "Failed to add $($row.Email). The message was: $($_)" -ForegroundColor Red
-        if ([string]::IsNullOrEmpty($driveUrl) -or [string]::IsNullOrWhitespace($driveUrl) ) {
+        if ([String]::IsNullOrEmpty($driveUrl) -or [String]::IsNullOrWhitespace($driveUrl) ) {
             $row.DriveUrl = $NOT_APPLICABLE
         }
         else {
@@ -102,8 +99,7 @@ function ProcessDrive ([parameter(mandatory)][System.Object]$row,
     }
 }
 
-function HasError ([parameter(mandatory)][System.Object]$row, 
-    [parameter(mandatory)][System.Object]$ProcessDriveError) {
+function HasError ([parameter(mandatory)][System.Object]$row, [parameter(mandatory)][System.Object]$ProcessDriveError) {
     if ($ProcessDriveError.Count -ge 1) {
         Write-Host "Failed to add $($row.Email). The message was: $($ProcessDriveError[0].Exception)" -ForegroundColor Red
         $row.DriveStatus = $($FAILED)
@@ -114,9 +110,7 @@ function HasError ([parameter(mandatory)][System.Object]$row,
     return $false
 }
 
-function BuildPermission([parameter(mandatory)][string]$applicationId, 
-    [parameter(mandatory)][string]$applicationDisplayName, 
-    [parameter(mandatory)][string[]]$roles) {
+function BuildPermission([parameter(mandatory)][String]$applicationId, [parameter(mandatory)][String]$applicationDisplayName, [parameter(mandatory)][string[]]$roles) {
     $params = @{
         roles               = $roles
         grantedToIdentities = @(
@@ -131,13 +125,11 @@ function BuildPermission([parameter(mandatory)][string]$applicationId,
     return $params
 }
 
-function BuildPermissionMessage ([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphPermission]$permission, 
-    [parameter(mandatory)][string]$siteId, 
-    [parameter(mandatory)][string]$siteUrl) {
+function BuildPermissionMessage ([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphPermission]$permission, [parameter(mandatory)][String]$siteId, [parameter(mandatory)][String]$siteUrl) {
     return "Site Id: $($siteId), Permission Id: $($permission.Id), Roles: $($permission.Roles), Site Url: $($siteUrl)"
 }
 
-function GetDriveUrl([parameter(mandatory)][string]$webUrl) {
+function GetDriveUrl([parameter(mandatory)][String]$webUrl) {
     $index = $webUrl.LastIndexOf('/') 
     if ($index -ne -1) {
     
@@ -174,8 +166,7 @@ function ProcessMySite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.
     Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
 }
 
-function GetMySiteHost([parameter(mandatory)][string]$id) {
-    
+function GetMySiteHost([parameter(mandatory)][String]$id) {
     $index = $id.IndexOf(',') 
     $mySiteHost = $null
     if ($index -ne -1) {
@@ -189,44 +180,32 @@ function GetMySiteHost([parameter(mandatory)][string]$id) {
     return $mySiteHost
 }
 
-function CreateUpdateApplicationAccessPolicy(
-    [parameter(mandatory)][string]$appId,
-    [parameter(mandatory)][string]$appName, 
-    [parameter(mandatory)][string]$certPath, 
-    [parameter(mandatory)][string]$tenantName, 
-    [parameter(mandatory)][string]$mailGroupAlias
-) {
+function CreateUpdateApplicationAccessPolicy([parameter(mandatory)][String]$appId, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$certPath, [parameter(mandatory)][String]$tenantName, [parameter(mandatory)][String]$mailGroupAlias) {
     $appPolicies = { 
         Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
         CheckIfErrors -errorToProcess $ErrorResult
     } | Retry -timeoutInSecs 2 -retryCount 10 -context "Get Application Access Policy"
     
-    $policyExists = $false
     if ($appPolicies) {
         foreach ($policie in $appPolicies) {
             if ($policie.AppId -eq $appId) {
                 Write-Host "Access Policy already exists for: $appId" -ForegroundColor Yellow 
-                $policyExists = $true
+                return $policie
             }
         }
     }
-    if ($policyExists -eq $false) {
-        Write-Host "Creating Policy for: $mailGroupAlias"
-        $policy = { 
-            New-ApplicationAccessPolicy -AppId $appId -PolicyScopeGroupId $mailGroupAlias -AccessRight RestrictAccess  -Description “Restricted policy for App $appName ($appId)" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult 
-            CheckIfErrors -errorToProcess $ErrorResult
-        } | Retry -timeoutInSecs 2 -retryCount 10 -context "Create Application Access Policy"
-        Write-Host "Created Policy for: $mailGroupAlias with Id: $($policy.Id)" -ForegroundColor Green
-    }
+    
+    Write-Host "Creating Policy for: $mailGroupAlias"
+    $policy = { 
+        New-ApplicationAccessPolicy -AppId $appId -PolicyScopeGroupId $mailGroupAlias -AccessRight RestrictAccess  -Description “Restricted policy for App $appName ($appId)" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult 
+        CheckIfErrors -errorToProcess $ErrorResult
+    } | Retry -timeoutInSecs 2 -retryCount 10 -context "Create Application Access Policy"
+    Write-Host "Created Policy for: $mailGroupAlias with Id: $($policy.Id)" -ForegroundColor Green
+    
     return $policy
 }
 
-function ApplyLimitedMailPolicy([parameter(mandatory)][string]$appId, 
-    [parameter(mandatory)][string]$appName, 
-    [parameter(mandatory)][string]$certPath, 
-    [parameter(mandatory)][string]$tenantName, 
-    [parameter(mandatory)][string]$mailGroupAlias,
-    [SecureString] $certPassword) {
+function ApplyLimitedMailPolicy([parameter(mandatory)][String]$appId, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$certPath, [parameter(mandatory)][String]$tenantName, [parameter(mandatory)][String]$mailGroupAlias, [SecureString]$certPassword) {
     {
         Connect-ExchangeOnline -CertificateFilePath $certPath -CertificatePassword $certPassword -AppId $appId  -Organization $tenantName -ShowBanner:$false -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
         CheckIfErrors -errorToProcess $ErrorResult
@@ -236,7 +215,7 @@ function ApplyLimitedMailPolicy([parameter(mandatory)][string]$appId,
     return $policy
 }
 
-function GetCreateMailGroup([parameter(mandatory)][string]$mailGroupAlias) {
+function GetCreateMailGroup([parameter(mandatory)][String]$mailGroupAlias) {
     $distributionGroup = Get-DistributionGroup -Identity $mailGroupAlias -ErrorAction SilentlyContinue
     if ($distributionGroup) {
         Write-Host "$($distributionGroup.PrimarySmtpAddress) already exists." -ForegroundColor Yellow
@@ -249,15 +228,9 @@ function GetCreateMailGroup([parameter(mandatory)][string]$mailGroupAlias) {
     return $distributionGroup;
 }
 
-function ProcessCsv ([parameter(mandatory)][string]$workFolder, 
-    [parameter(mandatory)][string]$mailGroupAlias, 
-    [parameter(mandatory)][string]$adminAppClientId, 
-    [parameter(mandatory)][string]$tenantId, 
-    [parameter(mandatory)][string]$adminAppCertificate, 
-    [parameter(mandatory)][string]$clientAppId,
-    [SecureString] $certPassword) {
+function ProcessCsv ([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$mailGroupAlias, [parameter(mandatory)][String]$adminAppClientId, [parameter(mandatory)][String]$tenantId, [parameter(mandatory)][String]$adminAppCertificate, [parameter(mandatory)][String]$clientAppId, [SecureString] $certPassword) {
     try {
-        $file = Join-Path -Path $workFolder -ChildPath "Emails.csv" 
+        $file = Join-Path -Path $workFolder -ChildPath "EmailDrive.csv" 
         if (!(Test-Path -Path $file -PathType Leaf)) {
             Write-Host "File: $($file) could not be found." -ForegroundColor Red
             return;
