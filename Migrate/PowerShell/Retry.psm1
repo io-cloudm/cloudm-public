@@ -34,18 +34,28 @@
             }
         } while ($attempts -le $retryCount)
 
-        if ($attempts -ge $retryCount -and $throw) {
+        if ($attempts -ge $retryCount -and $throw -eq $true) {
             Write-Host "[Error Message] for '$context'. The message was: $($lastRetryException) `n" -ForegroundColor Red
             throw $lastRetryException
         }
     }
 }
 
-function CheckIfErrors ($errorToProcess) {
+function CheckIfErrors ([System.Collections.ArrayList]$errorToProcess) {
+    $message = $null
     if ($errorToProcess.Count -ge 1) {
-        Write-Host "The message was: $($errorToProcess[0].Exception.Message)" -ForegroundColor Red
+        foreach ($error in $errorToProcess) {
+            if ($error.Exception.Message) {
+                $message = $error.Exception.Message
+                Write-Host "The message was: $($message)" -ForegroundColor Red
+                break
+            }
+        }
+        
         $errorToProcess.Clear()
-        throw($errorToProcess[0].Exception.Message)
+        if ($message) {
+            throw($message)
+        }
     }
 }
 Export-ModuleMember -Function Retry

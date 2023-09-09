@@ -5,7 +5,8 @@ function ImportModules([parameter(mandatory)][String]$moduleName,
     Write-Progress "Importing modules"
     #Install and Import Graph Module
     Write-Progress "Checking if $moduleName is installed"
-    if (!(Get-InstalledModule $moduleName)) {
+    $installedModule = Get-InstalledModule $moduleName -ErrorAction SilentlyContinue
+    if (!$installedModule) {
         Write-Progress "$moduleName module is not installed."
         Write-Progress "Installing $moduleName Module"
         Write-Host "Installing $moduleName Module..." -ForegroundColor Green
@@ -447,6 +448,7 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         if ($limitedScope) {
             ImportModules -moduleName Microsoft.Graph.Files -requiredVersion 2.4.0
             ImportModules -moduleName Microsoft.Graph.Sites -requiredVersion 2.4.0
+            ImportModules -moduleName ExchangeOnlineManagement -requiredVersion 3.2.0
         }
         CreateInteractiveConnection -azureEnvironment $azureEnvironment
            
@@ -517,7 +519,12 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         MoveFiles -sourceFolder $workFolder -appName $app.DisplayName -limitedScope $limitedScope -publisherDomain $app.PublisherDomain
     }
     catch {
+        Write-Host "The message was: $($_)" -ForegroundColor Red
         throw
+    }
+    finally {
+        Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+        Write-Host "Disconnect-MgGraph"
     }
 }
 function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$publisherDomain, [bool]$limitedScope) {
@@ -639,13 +646,9 @@ function CreateAzureAppRegistration() {
         default { $false }
     }
     Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
+    
+    CreateAppRegistration -token $token -workFolder $location -certPassword $certPassword -appName $appName -azureEnvironment $azureEnvironment -limitedScope $limitedScope
+}
 
-    try {
-        CreateAppRegistration -token $token -workFolder $location -certPassword $certPassword -appName $appName -azureEnvironment $azureEnvironment -limitedScope $limitedScope
-    }
-    finally {
-        Disconnect-MgGraph -ErrorAction SilentlyContinue
-        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
-    }
 }
 }

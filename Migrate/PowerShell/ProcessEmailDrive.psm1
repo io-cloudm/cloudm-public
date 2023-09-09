@@ -183,8 +183,8 @@ function GetMySiteHost([parameter(mandatory)][String]$id) {
 function CreateUpdateApplicationAccessPolicy([parameter(mandatory)][String]$appId, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$certPath, [parameter(mandatory)][String]$tenantName, [parameter(mandatory)][String]$mailGroupAlias) {
     $appPolicies = { 
         Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
-        CheckIfErrors -errorToProcess $ErrorResult
-    } | Retry -timeoutInSecs 2 -retryCount 10 -context "Get Application Access Policy"
+        CheckIfErrors -errorToProcess $ErrorResult 
+    } | Retry -timeoutInSecs 2 -retryCount 10 -context "Get Application Access Policy" -throw $false
     
     if ($appPolicies) {
         foreach ($policie in $appPolicies) {
@@ -241,7 +241,7 @@ function ProcessCsv ([parameter(mandatory)][String]$workFolder, [parameter(manda
         {
             Connect-MgGraph -ClientId $adminAppClientId -TenantId $tenantId -Certificate $cert -NoWelcome -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
             CheckIfErrors -errorToProcess $ErrorResult
-        } | Retry -timeoutInSecs 2 -retryCount 10 -context "Connect to MgGraph: $($CLOUDM_ADMIN_APP)"
+        } | Retry -timeoutInSecs 5 -retryCount 10 -context "Connect to MgGraph: $($CLOUDM_ADMIN_APP)"
 
         $site = ProcessRootSite
         ProcessMySite -site $site
