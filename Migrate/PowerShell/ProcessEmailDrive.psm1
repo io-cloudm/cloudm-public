@@ -26,7 +26,7 @@ function GetMailGroup([parameter(mandatory)][String]$mailGroupAlias) {
 }
 
 function ProcessEmail ([parameter(mandatory)][System.Object]$row, [parameter(mandatory)][String] $mailGroupAlias, $attempt) {
-    Write-Host "Processing Email : $($row.Email)"
+    Write-Host "Processing Email"
     if ($script:distributionGroup -eq $false -and $attempt -ge 1) {
         Write-Host "$($mailGroupAlias) does not exist" -ForegroundColor Red
         return
@@ -69,7 +69,7 @@ function ProcessEmail ([parameter(mandatory)][System.Object]$row, [parameter(man
 
 function ProcessDrive ([parameter(mandatory)][System.Object]$row, [parameter(mandatory)][String]$clientAppId) {
 
-    Write-Host "Processing Drive : $($row.Email)"
+    Write-Host "Processing Drive"
     $driveUrl = $null
     try {
         $drive = Get-MgUserDefaultDrive -UserId $row.Email -Property $SITE_PROPERTY_REQUEST -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError
@@ -126,7 +126,7 @@ function BuildPermission([parameter(mandatory)][String]$applicationId, [paramete
 }
 
 function BuildPermissionMessage ([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphPermission]$permission, [parameter(mandatory)][String]$siteId, [parameter(mandatory)][String]$siteUrl) {
-    return "Site Id: $($siteId), Permission Id: $($permission.Id), Roles: $($permission.Roles), Site Url: $($siteUrl)"
+    return "Site Url: $($siteUrl) ($siteId). Permission Id: $($permission.Id), Roles: $($permission.Roles)"
 }
 
 function GetDriveUrl([parameter(mandatory)][String]$webUrl) {
@@ -141,13 +141,13 @@ function GetDriveUrl([parameter(mandatory)][String]$webUrl) {
 function ProcessRootSite() {
     $site = {
         Get-MgSite -SiteId "Root" -Property $SITE_PROPERTY_REQUEST -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
-        CheckIfErrors -errorToProcess $ErrorResult
-    } | Retry -timeoutInSecs 2 -retryCount 10 -context "Get-MgSite Root"
+        CheckErrors -ErrorToProcess $ErrorResult
+    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgSite Root"
     
     $permission = {
         New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $clientAppId -applicationDisplayName $CLOUDM_ADMIN_APP -roles @("Read")) -ErrorVariable ErrorResult
-        CheckIfErrors -errorToProcess $ErrorResult
-    } | Retry -timeoutInSecs 2 -retryCount 10 -context "New-MgSitePermission: $($site.Id)"
+        CheckErrors -ErrorToProcess $ErrorResult
+    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "New-MgSitePermission: $($site.Id)"
     Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
     return [Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site
 }
@@ -156,13 +156,13 @@ function ProcessMySite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.
     $siteId = GetMySiteHost -id $site.Id
     $site = { 
         Get-MgSite -SiteId $siteId -Property $SITE_PROPERTY_REQUEST -ErrorVariable ErrorResult
-        CheckIfErrors -errorToProcess $ErrorResult
-    } | Retry -timeoutInSecs 2 -retryCount 10 -context "Get-MgSite: $($siteId)"
+        CheckErrors -ErrorToProcess $ErrorResult
+    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgSite: $($siteId)"
         
     $permission = {
         New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $clientAppId -applicationDisplayName $CLOUDM_ADMIN_APP -roles @("Read")) -ErrorVariable ErrorResult
-        CheckIfErrors -errorToProcess $ErrorResult
-    } | Retry -timeoutInSecs 2 -retryCount 10 -context "New-MgSitePermission: $($site.Id)"
+        CheckErrors -ErrorToProcess $ErrorResult
+    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "New-MgSitePermission: $($site.Id)"
     Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
 }
 
@@ -183,8 +183,8 @@ function GetMySiteHost([parameter(mandatory)][String]$id) {
 function CreateUpdateApplicationAccessPolicy([parameter(mandatory)][String]$appId, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$certPath, [parameter(mandatory)][String]$tenantName, [parameter(mandatory)][String]$mailGroupAlias) {
     $appPolicies = { 
         Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
-        CheckIfErrors -errorToProcess $ErrorResult 
-    } | Retry -timeoutInSecs 2 -retryCount 10 -context "Get Application Access Policy" -throw $false
+        CheckErrors -ErrorToProcess $ErrorResult 
+    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get Application Access Policy" -OnFinalExceptionContinue
     
     if ($appPolicies) {
         foreach ($policie in $appPolicies) {
@@ -198,18 +198,18 @@ function CreateUpdateApplicationAccessPolicy([parameter(mandatory)][String]$appI
     Write-Host "Creating Policy for: $mailGroupAlias"
     $policy = { 
         New-ApplicationAccessPolicy -AppId $appId -PolicyScopeGroupId $mailGroupAlias -AccessRight RestrictAccess  -Description “Restricted policy for App $appName ($appId)" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult 
-        CheckIfErrors -errorToProcess $ErrorResult
-    } | Retry -timeoutInSecs 2 -retryCount 10 -context "Create Application Access Policy"
+        CheckErrors -ErrorToProcess $ErrorResult
+    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Create Application Access Policy"
     Write-Host "Created Policy for: $mailGroupAlias with Id: $($policy.Id)" -ForegroundColor Green
     
     return $policy
 }
 
-function ApplyLimitedMailPolicy([parameter(mandatory)][String]$appId, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$certPath, [parameter(mandatory)][String]$tenantName, [parameter(mandatory)][String]$mailGroupAlias, [SecureString]$certPassword) {
+function ApplyLimitedMailPolicy([parameter(mandatory)][String]$appId, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$certPath, [parameter(mandatory)][String]$tenantName, [parameter(mandatory)][String]$mailGroupAlias, [SecureString]$secureCertificatePassword) {
     {
-        Connect-ExchangeOnline -CertificateFilePath $certPath -CertificatePassword $certPassword -AppId $appId  -Organization $tenantName -ShowBanner:$false -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
-        CheckIfErrors -errorToProcess $ErrorResult
-    } | Retry -timeoutInSecs 2 -retryCount 10 -context "Connect to Exchange Online"
+        Connect-ExchangeOnline -CertificateFilePath $certPath -CertificatePassword $secureCertificatePassword -AppId $appId  -Organization $tenantName -ShowBanner:$false -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
+        CheckErrors -ErrorToProcess $ErrorResult
+    } | RetryCommand -TimeoutInSeconds 5 -RetryCount 10 -Context "Connect to Exchange Online"
     $distributionGroup = GetCreateMailGroup -mailGroupAlias $mailGroupAlias
     $policy = CreateUpdateApplicationAccessPolicy -appId $appId -appName $appName -certPath $certPath -tenantName $tenantName -mailGroupAlias $distributionGroup.PrimarySmtpAddress
     return $policy
@@ -228,23 +228,26 @@ function GetCreateMailGroup([parameter(mandatory)][String]$mailGroupAlias) {
     return $distributionGroup;
 }
 
-function ProcessCsv ([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$mailGroupAlias, [parameter(mandatory)][String]$adminAppClientId, [parameter(mandatory)][String]$tenantId, [parameter(mandatory)][String]$adminAppCertificate, [parameter(mandatory)][String]$clientAppId, [SecureString] $certPassword) {
+function ProcessCsv ([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$mailGroupAlias, [parameter(mandatory)][String]$adminAppClientId, [parameter(mandatory)][String]$tenantId, [parameter(mandatory)][String]$adminAppCertificate, [parameter(mandatory)][String]$clientAppId, [SecureString] $secureCertificatePassword) {
     try {
         $file = Join-Path -Path $workFolder -ChildPath "EmailDrive.csv" 
         if (!(Test-Path -Path $file -PathType Leaf)) {
-            Write-Host "File: $($file) could not be found." -ForegroundColor Red
+            Write-Host "File: $($file) could not be found. Exiting Process Csv" -ForegroundColor Red
             return;
         }   
+        $nl = [Environment]::NewLine
+       
         $csv = Import-Csv $file
         $counter = 0
-        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($adminAppCertificate, $certPassword)
+        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($adminAppCertificate, $secureCertificatePassword)
         {
             Connect-MgGraph -ClientId $adminAppClientId -TenantId $tenantId -Certificate $cert -NoWelcome -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
-            CheckIfErrors -errorToProcess $ErrorResult
-        } | Retry -timeoutInSecs 5 -retryCount 10 -context "Connect to MgGraph: $($CLOUDM_ADMIN_APP)"
-
+            CheckErrors -ErrorToProcess $ErrorResult
+        } | RetryCommand -TimeoutInSeconds 10 -RetryCount 10 -Context "Connect to MgGraph: $($CLOUDM_ADMIN_APP)"
+        Start-Sleep -Seconds 5
         $site = ProcessRootSite
         ProcessMySite -site $site
+        Write-Host "$($nl)$($nl)--------------------------------Processing Csv-----------------------------------------"
         foreach ($row in $csv) {
             $row | Add-Member -NotePropertyName "EmailStatus" -NotePropertyValue $NOT_APPLICABLE -Force
             $row | Add-Member -NotePropertyName "EmailErrorMessage" -NotePropertyValue $NOT_APPLICABLE -Force
@@ -252,6 +255,7 @@ function ProcessCsv ([parameter(mandatory)][String]$workFolder, [parameter(manda
             $row | Add-Member -NotePropertyName "DriveStatus" -NotePropertyValue $NOT_APPLICABLE -Force
             $row | Add-Member -NotePropertyName "DriveErrorMessage" -NotePropertyValue $NOT_APPLICABLE -Force
             $itemType = [ItemType]$row.ItemType
+            Write-Host "$($nl)$($nl)--------------------------------Processing $($row.Email) Starting-----------------------------------------"
             switch ($itemType) {
                 Drive {
                     ProcessDrive -row $row -clientAppId  $clientAppId
@@ -270,6 +274,7 @@ function ProcessCsv ([parameter(mandatory)][String]$workFolder, [parameter(manda
                     Write-Host "Unknown ItemType: $_" -ForegroundColor Yellow
                 }
             }
+            Write-Host "--------------------------------Processing $($row.Email) Completed-----------------------------------------"
             $counter++
         }
         $csv | Export-Csv $file -NoType

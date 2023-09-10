@@ -228,7 +228,7 @@ function GenerateResourceAccess($resourceId, $resourceType) {
 function CreateCertificate([parameter(mandatory)][String]$appId, 
     [parameter(mandatory)][String]$workFolder, 
     [parameter(mandatory)][String]$certName, 
-    [SecureString] $certPassword, 
+    [SecureString] $secureCertificatePassword, 
     [String]$certStartDate, 
     [String]$certEndDate) {
     Write-Progress "Creating certificate"
@@ -249,7 +249,7 @@ function CreateCertificate([parameter(mandatory)][String]$appId,
 
     #Generate certificate
     if (CreateSelfSignedCertificate -certName $certName -startDate $certStartDate -endDate $certEndDate -forceCert $true) {
-        ExportPFXFile -workFolder $workFolder -certName $certName -certPassword $certPassword
+        ExportPFXFile -workFolder $workFolder -certName $certName -secureCertificatePassword $secureCertificatePassword
         RemoveCertsFromStore -certName $certName -store "my"
         RemoveCertsFromStore -certName $certName -store "ca"
     }
@@ -365,7 +365,7 @@ function CheckDirectory([parameter(mandatory)][String]$path) {
     }
 }
 
-function ExportPFXFile([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$certName, [SecureString] $certPassword) {
+function ExportPFXFile([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$certName, [SecureString] $secureCertificatePassword) {
     Write-Progress "Exporting PFX"
     if ($certName.ToLower().StartsWith("cn=")) {
         # Remove CN from common name
@@ -375,7 +375,7 @@ function ExportPFXFile([parameter(mandatory)][String]$workFolder, [parameter(man
     $cert = Get-ChildItem -Path Cert:\LocalMachine\my | where-object { $_.Subject -eq "CN=$certName" }
     
     Write-Progress "Generating pfx file"
-    Export-PfxCertificate -Cert $cert -Password $securePassword -FilePath "$workFolder\$certName.pfx"
+    Export-PfxCertificate -Cert $cert -Password $secureCertificatePassword -FilePath "$workFolder\$certName.pfx"
     Write-Progress "Generating cer file"
     Export-Certificate -Cert $cert -Type CERT -FilePath "$workFolder\$certName.cer"
 }
@@ -428,13 +428,13 @@ function GrantAppRoleAssignmentToServicePrincipal([parameter(mandatory)][String]
     }
 }
 
-function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$azureEnvironment, [parameter(mandatory)][bool]$limitedScope, [SecureString]$certPassword) {
+function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$azureEnvironment, [System.Management.Automation.SwitchParameter]$limitedScope, [String]$certificatePassword) {
     Write-Progress ("Running as " + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
     # Validate directory
     CheckDirectory -path $workFolder
     $appName = CleanAppName -value $appName
     Set-Location -Path $workFolder
-
+    $secureCertificatePassword = GetSecurePassword -password $certificatePassword
     try {
         # Import/Install required modules
         Write-Host "Import Modules" -ForegroundColor Green
@@ -468,7 +468,7 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         $certStartDate = (Get-Date).ToString($dateFormat)
         $certEndDate = ([DateTime]::Now).AddYears(5).ToString($dateFormat)
 
-        CreateCertificate -appId $appId -workFolder $workFolder -certName $certName -certPassword $certPassword -certStartDate $certStartDate -certEndDate $certEndDate | Out-Null
+        CreateCertificate -appId $appId -workFolder $workFolder -certName $certName -secureCertificatePassword $secureCertificatePassword -certStartDate $certStartDate -certEndDate $certEndDate | Out-Null
         Write-Host "Certificate created. $($appName) - ($($appId))" -ForegroundColor Green
 
         # Create Service principal
@@ -507,15 +507,15 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         $policy = $null
         if ($limitedScope) {
             $mailGroupAlias = $appName 
-            $policy = ApplyLimitedMailPolicy -appId $appId -certPath $certPath -certPassword $certPassword -tenantName $app.PublisherDomain -appName $appName -mailGroupAlias $mailGroupAlias
-            $adminApp = CreateRegistrationAdminApp -appName "CloudM Admin App" -workFolder $workFolder -certName "CloudM Admin App" -certPassword $certPassword
+            $policy = ApplyLimitedMailPolicy -appId $appId -certPath $certPath -secureCertificatePassword $secureCertificatePassword -tenantName $app.PublisherDomain -appName $appName -mailGroupAlias $mailGroupAlias
+            $adminApp = CreateRegistrationAdminApp -appName "CloudM Admin App" -workFolder $workFolder -certName "CloudM Admin App" -secureCertificatePassword $secureCertificatePassword
             $tenantId = (Get-MgDomain | Where-Object { $_.isInitial }).Id
-            ProcessCsv -workFolder $workFolder -certPassword $certPassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId 
-            OutPutFile -app $adminApp.App -certPath $adminApp.CertPath -certPassword $certPassword -policy $policy
+            ProcessCsv -workFolder $workFolder -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId 
+            OutPutFile -app $adminApp.App -certPath $adminApp.CertPath -secureCertificatePassword $secureCertificatePassword -policy $policy
             MoveFiles -sourceFolder $workFolder -appName $adminApp.App.DisplayName -publisherDomain $app.PublisherDomain
         }
         
-        OutPutFile -app $app -certPath $certPath -certPassword $certPassword
+        OutPutFile -app $app -certPath $certPath -secureCertificatePassword $secureCertificatePassword
         MoveFiles -sourceFolder $workFolder -appName $app.DisplayName -limitedScope $limitedScope -publisherDomain $app.PublisherDomain
     }
     catch {
@@ -576,7 +576,7 @@ function CleanAppName([parameter(mandatory)][String]$value) {
     return ($value -replace $Pattern -replace '(^\s+|\s+$)', ' ' -replace '\s+', '')
 }
 
-function CreateRegistrationAdminApp([parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$certName, [SecureString] $certPassword) {
+function CreateRegistrationAdminApp([parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$certName, [SecureString] $secureCertificatePassword) {
     try {
         $requiredResourceAccess = GenerateApplicationApiPermissionsAdminApp
         $app = CreateApplication $appName -requiredResourceAccess $requiredResourceAccess
@@ -588,7 +588,7 @@ function CreateRegistrationAdminApp([parameter(mandatory)][String]$appName, [par
         $certStartDate = (Get-Date).ToString($dateFormat)
         $certEndDate = ([DateTime]::Now).AddYears(5).ToString($dateFormat)
 
-        CreateCertificate -appId $appId -workFolder $workFolder -certName $certName -certPassword $certPassword -certStartDate $certStartDate -certEndDate $certEndDate
+        CreateCertificate -appId $appId -workFolder $workFolder -certName $certName -secureCertificatePassword $secureCertificatePassword -certStartDate $certStartDate -certEndDate $certEndDate
         Write-Host "Certificate created. $($appName) - ($($appId))" -ForegroundColor Green
         $servicePrincipalId = GetOrCreateServicePrincipal  -appId $appId 
         $spAppId = '00000003-0000-0000-c000-000000000000' #Graph API
@@ -606,11 +606,11 @@ function CreateRegistrationAdminApp([parameter(mandatory)][String]$appName, [par
     }
 }
 
-function OutPutFile([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphApplication]$app, [parameter(mandatory)][String]$certPath, [PSObject]$policy, [SecureString]$certPassword) {
+function OutPutFile([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphApplication]$app, [parameter(mandatory)][String]$certPath, [PSObject]$policy, [SecureString]$secureCertificatePassword) {
     $nl = [Environment]::NewLine
     $output = ($nl + $nl + "Client ID: " + $app.AppId + ", App Name: " + $app.DisplayName)
     $output += ($nl + "Certificate Path: " + $certPath)
-    $output += ($nl + "Certificate Password: " + [System.Net.NetworkCredential]::new("", $certPassword).Password)
+    $output += ($nl + "Certificate Password: " + [System.Net.NetworkCredential]::new("", $secureCertificatePassword).Password)
     if ($policy) {
         $output += ($nl + "Policy Created for: " + $policy.ScopeName + " with " + $policy.AccessRight)
     }
@@ -633,9 +633,18 @@ function ApplyExchangeAdminRole($servicePrincipalId) {
         Write-Host "Exchange admin already applied" -ForegroundColor Yellow
     }
 }
+function GetSecurePassword ($password) {
+    if ($password) {
+        $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+    }
+    else {
+        $securePassword = (new-object System.Security.SecureString)
+    }
+    return $securePassword
+}
 
 function CreateAzureAppRegistration() {
-    $certPassword = Read-Host 'Enter Your Certificate Password:' 
+    $certificatePassword = Read-Host 'Enter Your Certificate Password:' 
     $location = Read-Host 'Enter the file location to save certificate:'
     $appName = Read-Host 'Enter the application Name'
     $azureEnvironment = Read-Host "Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
@@ -647,8 +656,6 @@ function CreateAzureAppRegistration() {
     }
     Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
     
-    CreateAppRegistration -token $token -workFolder $location -certPassword $certPassword -appName $appName -azureEnvironment $azureEnvironment -limitedScope $limitedScope
+    CreateAppRegistration -token $token -workFolder $location -certificatePassword $certificatePassword -appName $appName -azureEnvironment $azureEnvironment -limitedScope $limitedScope
 }
 
-}
-}

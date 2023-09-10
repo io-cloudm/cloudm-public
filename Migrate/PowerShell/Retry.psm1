@@ -1,15 +1,14 @@
-﻿function Retry {
+﻿function RetryCommand {
     [CmdletBinding()]
     param (
         [parameter(Mandatory, ValueFromPipeline)] 
         [ValidateNotNullOrEmpty()]
-        [scriptblock] $scriptBlock,
+        [scriptblock] $ScriptBlock,
         [ValidateNotNullOrEmpty()]
-        [string] $context,
-        [int] $retryCount = 10,
-        [int] $timeoutInSecs = 30,
-        [bool] $throw = $true
-
+        [string] $Context,
+        [int] $RetryCount = 10,
+        [int] $TimeoutInSeconds = 30,
+        [System.Management.Automation.SwitchParameter] $OnFinalExceptionContinue
     )
         
     process {
@@ -23,8 +22,8 @@
             }
             catch {
                 if ($attempts -le $retryCount) {
-                    Write-Host "[$attempts/$retryCount] Failed to execute command '$context'. Retrying in $TimeoutInSecs seconds..." -ForegroundColor Yellow
-                    Start-Sleep -Seconds $TimeoutInSecs
+                    Write-Host "[$attempts/$retryCount] Failed to execute command '$context'. Retrying in $timeoutInSeconds seconds..." -ForegroundColor Yellow
+                    Start-Sleep -Seconds $timeoutInSeconds
                     $attempts++
                 }
                 if ($attempts -eq $retryCount) {
@@ -34,29 +33,35 @@
             }
         } while ($attempts -le $retryCount)
 
-        if ($attempts -ge $retryCount -and $throw -eq $true) {
+        if ($attempts -ge $retryCount -and $OnFinalExceptionContinue -eq $false) {
             Write-Host "[Error Message] for '$context'. The message was: $($lastRetryException) `n" -ForegroundColor Red
             throw $lastRetryException
         }
     }
 }
 
-function CheckIfErrors ([System.Collections.ArrayList]$errorToProcess) {
-    $message = $null
-    if ($errorToProcess.Count -ge 1) {
-        foreach ($error in $errorToProcess) {
-            if ($error.Exception.Message) {
-                $message = $error.Exception.Message
-                Write-Host "The message was: $($message)" -ForegroundColor Red
-                break
+function CheckErrors {
+    [CmdletBinding()]
+    param (
+        [System.Collections.ArrayList]$ErrorToProcess
+    )
+    process {
+        $message = $null
+        if ($errorToProcess.Count -ge 1) {
+            foreach ($error in $errorToProcess) {
+                if ($error.Exception.Message) {
+                    $message = $error.Exception.Message
+                    Write-Host "The message was: $($message)" -ForegroundColor Red
+                    break
+                }
             }
-        }
         
-        $errorToProcess.Clear()
-        if ($message) {
-            throw($message)
+            $errorToProcess.Clear()
+            if ($message) {
+                throw($message)
+            }
         }
     }
 }
-Export-ModuleMember -Function Retry
-Export-ModuleMember -Function CheckIfErrors
+Export-ModuleMember -Function RetryCommand
+Export-ModuleMember -Function CheckErrors
