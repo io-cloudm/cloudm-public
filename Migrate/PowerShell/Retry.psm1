@@ -51,7 +51,6 @@ function CheckErrors {
             foreach ($error in $errorToProcess) {
                 if ($error.Exception.Message) {
                     $message = $error.Exception.Message
-                    Write-Host "The message was: $($message)" -ForegroundColor Red
                     break
                 }
             }
