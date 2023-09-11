@@ -644,18 +644,24 @@ function GetSecurePassword ($password) {
 }
 
 function CreateAzureAppRegistration() {
-    $certificatePassword = Read-Host 'Enter Your Certificate Password:' 
-    $location = Read-Host 'Enter the file location to save certificate:'
-    $appName = Read-Host 'Enter the application Name'
-    $azureEnvironment = Read-Host "Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
-    $limitedScopePrompt = Read-Host 'Type 0 for default scopes or 1 for limited scopes'
+    $nl = [Environment]::NewLine
+    Write-Host "(*) mark required fields"
+    $certificatePassword = Read-Host "$($nl)Enter Your Certificate Password " 
+    $location = Read-Host "$($nl)Enter the file location to save certificate * "
+    $appName = Read-Host "$($nl)Enter the application Name * "
+    $azureEnvironment = Read-Host "$($nl)Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
+    $limitedScopePrompt = Read-Host "$($nl)Type 0 for default scopes or 1 for limited scopes * "
     $limitedScope = switch ($limitedScopePrompt) {
         '1' { $true }
         '0' { $false }
         default { $false }
     }
-    Write-Host 'You are using the interactive mode. You will be prompted a window to connect to Graph via your Global Admin Credentails'
-    
-    CreateAppRegistration -token $token -workFolder $location -certificatePassword $certificatePassword -appName $appName -azureEnvironment $azureEnvironment -limitedScope $limitedScope
+    Read-Host "$($nl)$($nl)You are using the interactive mode. You will be prompted by a window to connect to Graph via your Global Admin Credentails. Please enter to continue"
+    if ($limitedScope -eq $true) {
+        CreateAppRegistration -workFolder "$($location)" -certificatePassword $certificatePassword -appName "$($appName)" -azureEnvironment $azureEnvironment -limitedScope
+    }
+    else {
+        CreateAppRegistration -workFolder "$($location)" -certificatePassword $certificatePassword -appName "$($appName)" -azureEnvironment $azureEnvironment
+    }
 }
 
