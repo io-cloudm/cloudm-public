@@ -433,6 +433,7 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
     # Validate directory
     CheckDirectory -path $workFolder
     $appName = CleanAppName -value $appName
+    $appName = "CloudM-$($appName)"
     Set-Location -Path $workFolder
     $secureCertificatePassword = GetSecurePassword -password $certificatePassword
     try {
@@ -505,18 +506,27 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         Write-Progress "Applying Application Roles" -Completed
         #--------------------------- END GRANT ADMIN CONSENT -------------------------
         $policy = $null
+        
         if ($limitedScope) {
             $mailGroupAlias = $appName 
             $policy = ApplyLimitedMailPolicy -appId $appId -certPath $certPath -secureCertificatePassword $secureCertificatePassword -tenantName $app.PublisherDomain -appName $appName -mailGroupAlias $mailGroupAlias
             $adminApp = CreateRegistrationAdminApp -appName "CloudM Admin App" -workFolder $workFolder -certName "CloudM Admin App" -secureCertificatePassword $secureCertificatePassword
             $tenantId = (Get-MgDomain | Where-Object { $_.isInitial }).Id
-            ProcessCsv -workFolder $workFolder -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId 
-            OutPutFile -app $adminApp.App -certPath $adminApp.CertPath -secureCertificatePassword $secureCertificatePassword -policy $policy
-            MoveFiles -sourceFolder $workFolder -appName $adminApp.App.DisplayName -publisherDomain $app.PublisherDomain
+            ProcessCsv -workFolder $workFolder -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId
+            $destinationPath = Join-Path -Path $workFolder -ChildPath "$($adminApp.App.DisplayName) - $($adminApp.App.PublisherDomain)"
+            New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
+            $adminAppCertPath = $destinationPath + "\" + $adminApp.App.DisplayName + ".pfx"
+            
+            OutPutFile -app $adminApp.App -certPath $adminAppCertPath -secureCertificatePassword $secureCertificatePassword -policy $policy
+            MoveFiles -sourceFolder $workFolder -appName $adminApp.App.DisplayName -publisherDomain $app.PublisherDomain -limitedScope $limitedScope -destinationPath $destinationPath
         }
+        $destinationPath = Join-Path -Path $workFolder -ChildPath "$($app.DisplayName) - $($app.PublisherDomain)"
+        New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
+        $appCertPath = $destinationPath + "\" + $certName + ".pfx"
+        OutPutFile -app $app -certPath $appCertPath -secureCertificatePassword $secureCertificatePassword
+        MoveFiles -sourceFolder $workFolder -appName $app.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath
         
-        OutPutFile -app $app -certPath $certPath -secureCertificatePassword $secureCertificatePassword
-        MoveFiles -sourceFolder $workFolder -appName $app.DisplayName -limitedScope $limitedScope -publisherDomain $app.PublisherDomain
+        
     }
     catch {
         Write-Host "The message was: $($_)" -ForegroundColor Red
@@ -527,9 +537,7 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         Write-Host "Disconnect-MgGraph"
     }
 }
-function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$publisherDomain, [bool]$limitedScope) {
-    $destinationPath = Join-Path -Path $sourceFolder -ChildPath "$($appName) - $($publisherDomain)"
-    New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
+function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$publisherDomain, [bool]$limitedScope, [string]$destinationPath) {
     Get-ChildItem -File -Recurse -Path $sourceFolder |
     ForEach-Object {
         if ($_.Name -match "^$($appName)") {
@@ -610,7 +618,9 @@ function OutPutFile([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMi
     $nl = [Environment]::NewLine
     $output = ($nl + $nl + "Client ID: " + $app.AppId + ", App Name: " + $app.DisplayName)
     $output += ($nl + "Certificate Path: " + $certPath)
-    $output += ($nl + "Certificate Password: " + [System.Net.NetworkCredential]::new("", $secureCertificatePassword).Password)
+    if ($secureCertificatePasswor) {
+        $output += ($nl + "Certificate Password: " + [System.Net.NetworkCredential]::new("", $secureCertificatePassword).Password)
+    }
     if ($policy) {
         $output += ($nl + "Policy Created for: " + $policy.ScopeName + " with " + $policy.AccessRight)
     }
@@ -650,7 +660,7 @@ function CreateAzureAppRegistration() {
     $location = Read-Host "$($nl)Enter the file location to save certificate * "
     $appName = Read-Host "$($nl)Enter the application Name * "
     $azureEnvironment = Read-Host "$($nl)Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
-    $limitedScopePrompt = Read-Host "$($nl)Type 0 for default scopes or 1 for limited scopes * "
+    $limitedScopePrompt = Read-Host "$($nl)Type 0 for default scopes or 1 for limited scopes "
     $limitedScope = switch ($limitedScopePrompt) {
         '1' { $true }
         '0' { $false }
@@ -664,4 +674,7 @@ function CreateAzureAppRegistration() {
         CreateAppRegistration -workFolder "$($location)" -certificatePassword $certificatePassword -appName "$($appName)" -azureEnvironment $azureEnvironment
     }
 }
+
+#CreateAzureAppRegistration
+CreateAppRegistration -workFolder "C:\Projects\cloudm-public\Migrate\PowerShell" -appName "LimitedTestApp" -azureEnvironment "0" -limitedScope -certificatePassword ""
 
