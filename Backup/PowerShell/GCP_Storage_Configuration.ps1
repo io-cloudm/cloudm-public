@@ -34,6 +34,9 @@
   .PARAMETER OutputPath
   Specifies a path to output the script log and service account p12 key to. If not provided UserProfileHome\GCPConfig is used as a default
   
+  .PARAMETER Autoclass
+  Specifies whether to create a Bucket using the Autoclass feature. OPTIONAL
+    
   .INPUTS
   None. You cannot pipe objects to GCP_Storage_Configuration.ps1.
 
@@ -50,10 +53,10 @@
   PS> .\GCP_Storage_Configuration.ps1 test-cloudm-io-archive test-service-account-1 us-central1 archive-test-bucket archive-crypto-key STANDARD json
 
   .EXAMPLE
-  PS> .\GCP_Storage_Configuration.ps1 test-cloudm-io-archive test-service-account-1 us-central1 archive-test-bucket archive-crypto-key STANDARD json C:\TestConfig
+  PS> .\GCP_Storage_Configuration.ps1 test-cloudm-io-archive test-service-account-1 us-central1 archive-test-bucket archive-crypto-key STANDARD json C:\TestConfig -Autoclass
 
   .EXAMPLE
-  PS> .\GCP_Storage_Configuration.ps1 test-cloudm-io-archive test-service-account-1 europe-west1 archive-test-bucket
+  PS> .\GCP_Storage_Configuration.ps1 test-cloudm-io-archive test-service-account-1 europe-west1 archive-test-bucket -Autoclass
 #>
 [CmdletBinding()]
 param(
@@ -106,7 +109,12 @@ param(
     [Parameter(Mandatory=$false, Position=7, ValueFromPipeline=$false, HelpMessage="Output Path for Json key and log e.g. C:\CloudM\GCPConfig")]
     [Alias("O")]
     [String]
-    $OutputPath = "$($Home)\GCPConfig"
+    $OutputPath = "$($Home)\GCPConfig",
+	
+	[Parameter(Mandatory=$false, ValueFromPipeline=$false, HelpMessage="Use GCS Autoclass")]
+    [Alias("A")]
+    [switch]
+    $Autoclass
 )
 
 $ErrorActionPreference = 'Stop'
@@ -590,7 +598,7 @@ Function Configure-Bucket-Access ([string]$LogPath, [string]$Bucket, [string[]]$
     Return $BucketAccessCreated
 }
 
-Function Configure-Bucket ([string]$LogPath, [string]$ProjectId, [string]$BucketName, [string]$Region, [string]$StorageClass)
+Function Configure-Bucket ([string]$LogPath, [string]$ProjectId, [string]$BucketName, [string]$Region, [string]$StorageClass, [bool]$Autoclass)
 {
     $Buckets = $null
 
@@ -626,7 +634,14 @@ Function Configure-Bucket ([string]$LogPath, [string]$ProjectId, [string]$Bucket
 
         Try {
 
-            gsutil mb -p $($ProjectId) -l $($Region) -c $StorageClass -b on $BucketToCreate
+			if($Autoclass) {
+
+				gsutil mb --autoclass -p $($ProjectId) -l $($Region) -c $StorageClass -b on $BucketToCreate
+			}
+			else {
+				gsutil mb -p $($ProjectId) -l $($Region) -c $StorageClass -b on $BucketToCreate
+			}
+			
 
             if($LastExitCode -ne 0) { Throw "Failed to Create Bucket: '$BucketToCreate' in Project: '$ProjectId'" }
 
@@ -729,8 +744,8 @@ Function Create-OutputPath([string]$OutputPath)
 }
 
 # Entry point for Script
-Function Configure-GCP-For-Archive ([string]$ProjectId, [string]$ServiceAccountId, [string]$Region, [string]$BucketName, [string]$KeyName, [string]$StorageClass, [string]$ServiceAccountKeyType, [string]$OutputPath = "$($Home)\GCPConfig")
-{
+Function Configure-GCP-For-Archive ([string]$ProjectId, [string]$ServiceAccountId, [string]$Region, [string]$BucketName, [string]$KeyName, [string]$StorageClass, [string]$ServiceAccountKeyType, [string]$OutputPath = "$($Home)\GCPConfig", [bool]$Autoclass)
+{	
     Create-OutputPath $OutputPath
 
     $LogPath = "$($OutputPath)\gcp_config.log"
@@ -771,7 +786,7 @@ Function Configure-GCP-For-Archive ([string]$ProjectId, [string]$ServiceAccountI
 
         # Bucket
         $BucketAccessSet = $False
-        $BucketUrl = Configure-Bucket $LogPath $ProjectId $BucketName $Region $StorageClass
+        $BucketUrl = Configure-Bucket $LogPath $ProjectId $BucketName $Region $StorageClass $Autoclass
 
         if($BucketUrl) {
 
@@ -867,4 +882,4 @@ Function Configure-GCP-For-Archive ([string]$ProjectId, [string]$ServiceAccountI
     }
 }
 
-Configure-GCP-For-Archive $ProjectId $ServiceAccountId $Region $BucketName $KeyName $StorageClass $ServiceAccountKeyType $OutputPath
+Configure-GCP-For-Archive $ProjectId $ServiceAccountId $Region $BucketName $KeyName $StorageClass $ServiceAccountKeyType $OutputPath $Autoclass
