@@ -1,6 +1,6 @@
 ﻿#Requires -RunAsAdministrator
 $ErrorActionPreference = "Stop"
-New-Variable -Name EXHANGE_ADMIN_ROLE_TEMPLATE_ID -Value  "29232cdf-9323-42fd-ade2-1d097af3e4de" -Option ReadOnly
+$EXHANGE_ROLE_TEMPLATE_ID = "29232cdf-9323-42fd-ade2-1d097af3e4de"
 function ImportModules([parameter(mandatory)][String]$moduleName, 
     [parameter(mandatory)][String]$requiredVersion) {
     Write-Progress "Importing modules"
@@ -636,14 +636,11 @@ function ApplyExchangeAdminRole($servicePrincipalId) {
         $id = Get-MgServicePrincipalMemberOf -ServicePrincipalId $servicePrincipalId -ErrorAction SilentlyContinue
         if (!$id) {
             $params = @{
-                roleTemplateId = $EXHANGE_ADMIN_ROLE_TEMPLATE_ID
+                roleTemplateId = $EXHANGE_ROLE_TEMPLATE_ID
             }
-            $result = New-MgDirectoryRole -BodyParameter $params -ErrorAction SilentlyContinue
-            if(!$result){
-                throw("NewMgDirectoryRole failed")
-            }
+            New-MgDirectoryRole -BodyParameter $params -ErrorAction SilentlyContinue
             #Exchange Administrator
-            $directoryRoleId = (Get-MgDirectoryRole -Filter "RoleTemplateId eq '$(EXHANGE_ADMIN_ROLE_TEMPLATE_ID)'").Id 
+            $directoryRoleId = (Get-MgDirectoryRole -Filter "RoleTemplateId eq '$($EXHANGE_ROLE_TEMPLATE_ID)'").Id 
             New-MgDirectoryRoleMemberByRef -DirectoryRoleId $directoryRoleId  -OdataId "https://graph.microsoft.com/v1.0/directoryObjects/$servicePrincipalId"
         }
     }
