@@ -518,13 +518,13 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
             $adminAppCertPath = $destinationPath + "\" + $adminApp.App.DisplayName + ".pfx"
             
             OutPutFile -app $adminApp.App -certPath $adminAppCertPath -secureCertificatePassword $secureCertificatePassword -policy $policy
-            MoveFiles -sourceFolder $workFolder -appName $adminApp.App.DisplayName -publisherDomain $app.PublisherDomain -limitedScope $limitedScope -destinationPath $destinationPath
+            MoveFiles -sourceFolder $workFolder -appName $adminApp.App.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath
         }
         $destinationPath = Join-Path -Path $workFolder -ChildPath "$($app.DisplayName) - $($app.PublisherDomain)"
         New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
         $appCertPath = $destinationPath + "\" + $certName + ".pfx"
         OutPutFile -app $app -certPath $appCertPath -secureCertificatePassword $secureCertificatePassword
-        MoveFiles -sourceFolder $workFolder -appName $app.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath
+        MoveFiles -sourceFolder $workFolder -appName $app.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath -limitedScope $limitedScope
         
         
     }
@@ -676,5 +676,5 @@ function CreateAzureAppRegistration() {
 }
 
 #CreateAzureAppRegistration
-CreateAppRegistration -workFolder "C:\Projects\cloudm-public\Migrate\PowerShell" -appName "LimitedTestApp" -azureEnvironment "0" -limitedScope -certificatePassword ""
+CreateAppRegistration -workFolder "C:\CloudM" -appName "LimitedTestApp" -azureEnvironment "0" -limitedScope -certificatePassword ""
 
