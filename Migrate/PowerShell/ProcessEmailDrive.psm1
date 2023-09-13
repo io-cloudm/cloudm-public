@@ -76,15 +76,19 @@ function ProcessDrive ([parameter(mandatory)][System.Object]$row, [parameter(man
         if ((HasError -row $row -ProcessDriveError $ProcessDriveError)) {
             return
         }
-        $permission = New-MgSitePermission -SiteId $drive.Id -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $clientAppId -applicationDisplayName $CLOUDM_ADMIN_APP -roles @("FullControl"))
+        $driveUrl = (GetDriveUrl -webUrl $drive.WebUrl)
+
+        $siteId = (Get-MgAllSite -Filter "WebUrl eq '$($driveUrl)'").Id
+
+        $permission = New-MgSitePermission -SiteId $siteId -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $clientAppId -applicationDisplayName $CLOUDM_ADMIN_APP -roles @("FullControl"))
         if ((HasError -row $row -ProcessDriveError $ProcessDriveError)) {
             return
         }
-        $driveUrl = (GetDriveUrl -webUrl $drive.WebUrl)
-        $row.DriveUrl = $driveUrl
+        
+        $row.DriveUrl = "$($driveUrl) - ($($siteId ))"
         $row.DriveStatus = $($SUCCESS)
         $row.DriveErrorMessage = $NOT_APPLICABLE
-        Write-Host (BuildPermissionMessage -permission $permission -siteId $drive.Id -siteUrl $driveUrl) -ForegroundColor Green
+        Write-Host (BuildPermissionMessage -permission $permission -siteId $siteId -siteUrl $driveUrl) -ForegroundColor Green
     }
     catch {
         Write-Host "Failed to add $($row.Email). The message was: $($_)" -ForegroundColor Red
