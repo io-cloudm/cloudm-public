@@ -26,7 +26,7 @@
   Specifies the Cryptographic Key to create in Google Cloud Storage if choosing to use your own key. OPTIONAL.
 
   .PARAMETER StorageClass
-  Specifies the Bucket Storage Class to use. Storage Class must be one of 'STANDARD', 'NEARLINE', 'COLDLINE', 'ARCHIVE'. OPTIONAL.
+  Specifies the Bucket Storage Class to use. Storage Class must be one of 'STANDARD', 'NEARLINE', 'COLDLINE', 'ARCHIVE', 'AUTOCLASS'. OPTIONAL.
 
   .PARAMETER ServiceAccountKeyType
   Specifies the Service Account Key Type to create. Must be one of 'json', 'p12'. OPTIONAL.
@@ -34,6 +34,9 @@
   .PARAMETER OutputPath
   Specifies a path to output the script log and service account p12 key to. If not provided UserProfileHome\GCPConfig is used as a default
   
+  .PARAMETER Autoclass
+  Specifies whether to create a Bucket using the Autoclass feature. OPTIONAL
+    
   .INPUTS
   None. You cannot pipe objects to GCP_Storage_Configuration.ps1.
 
@@ -91,9 +94,9 @@ param(
     [String]
     $KeyName,
 
-    [Parameter(Mandatory=$false, Position=5, ValueFromPipeline=$false, HelpMessage="Storage Class must be one of 'STANDARD', 'NEARLINE', 'COLDLINE', 'ARCHIVE'")]
+    [Parameter(Mandatory=$false, Position=5, ValueFromPipeline=$false, HelpMessage="Storage Class must be one of 'STANDARD', 'NEARLINE', 'COLDLINE', 'ARCHIVE', 'AUTOCLASS'")]
     [Alias("SC")]
-    [ValidateSet("STANDARD", "NEARLINE", "COLDLINE", "ARCHIVE")]
+    [ValidateSet("STANDARD", "NEARLINE", "COLDLINE", "ARCHIVE", "AUTOCLASS")]
     [String]
     $StorageClass = "STANDARD",
 
@@ -626,7 +629,14 @@ Function Configure-Bucket ([string]$LogPath, [string]$ProjectId, [string]$Bucket
 
         Try {
 
-            gsutil mb -p $($ProjectId) -l $($Region) -c $StorageClass -b on $BucketToCreate
+			if($StorageClass -eq "AUTOCLASS") {
+
+				gsutil mb --autoclass -p $($ProjectId) -l $($Region) -b on $BucketToCreate
+			}
+			else {
+				gsutil mb -p $($ProjectId) -l $($Region) -c $StorageClass -b on $BucketToCreate
+			}
+			
 
             if($LastExitCode -ne 0) { Throw "Failed to Create Bucket: '$BucketToCreate' in Project: '$ProjectId'" }
 
@@ -730,7 +740,7 @@ Function Create-OutputPath([string]$OutputPath)
 
 # Entry point for Script
 Function Configure-GCP-For-Archive ([string]$ProjectId, [string]$ServiceAccountId, [string]$Region, [string]$BucketName, [string]$KeyName, [string]$StorageClass, [string]$ServiceAccountKeyType, [string]$OutputPath = "$($Home)\GCPConfig")
-{
+{	
     Create-OutputPath $OutputPath
 
     $LogPath = "$($OutputPath)\gcp_config.log"
