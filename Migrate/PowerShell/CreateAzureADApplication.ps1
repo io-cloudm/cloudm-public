@@ -1,6 +1,7 @@
 ﻿#Requires -RunAsAdministrator
 $ErrorActionPreference = "Stop"
 $EXHANGE_ROLE_TEMPLATE_ID = "29232cdf-9323-42fd-ade2-1d097af3e4de"
+$MaximumFunctionCount = 8192
 function ImportModules([parameter(mandatory)][String]$moduleName, 
     [parameter(mandatory)][String]$requiredVersion) {
     Write-Progress "Importing modules"
@@ -450,6 +451,8 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         if ($limitedScope) {
             ImportModules -moduleName Microsoft.Graph.Files -requiredVersion 2.4.0
             ImportModules -moduleName Microsoft.Graph.Sites -requiredVersion 2.4.0
+            ImportModules -moduleName Microsoft.Graph.Groups -requiredVersion 2.4.0
+            ImportModules -moduleName Microsoft.Graph.Teams -requiredVersion 2.4.0
             ImportModules -moduleName ExchangeOnlineManagement -requiredVersion 3.2.0
         }
         CreateInteractiveConnection -azureEnvironment $azureEnvironment
@@ -513,7 +516,8 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
             $policy = ApplyLimitedMailPolicy -appId $appId -certPath $certPath -secureCertificatePassword $secureCertificatePassword -tenantName $app.PublisherDomain -appName $appName -mailGroupAlias $mailGroupAlias
             $adminApp = CreateRegistrationAdminApp -appName "CloudM Admin App" -workFolder $workFolder -certName "CloudM Admin App" -secureCertificatePassword $secureCertificatePassword
             $tenantId = (Get-MgDomain | Where-Object { $_.isInitial }).Id
-            ProcessCsv -workFolder $workFolder -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId
+            ProcessEmailDriveCsv -workFolder $workFolder -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId
+            ProcessMicrosoftTeamGroupCsv -workFolder $workFolder -secureCertificatePassword $secureCertificatePassword -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId
             $destinationPath = Join-Path -Path $workFolder -ChildPath "$($adminApp.App.DisplayName) - $($adminApp.App.PublisherDomain)"
             New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
             $adminAppCertPath = $destinationPath + "\" + $adminApp.App.DisplayName + ".pfx"

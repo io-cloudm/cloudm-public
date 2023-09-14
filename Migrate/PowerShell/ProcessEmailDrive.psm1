@@ -26,27 +26,25 @@ function GetMailGroup([parameter(mandatory)][String]$mailGroupAlias) {
 }
 
 function ProcessEmail ([parameter(mandatory)][System.Object]$row, [parameter(mandatory)][String] $mailGroupAlias, $attempt) {
-    Write-Host "Processing Email"
-    if ($script:distributionGroup -eq $false -and $attempt -ge 1) {
-        Write-Host "$($mailGroupAlias) does not exist" -ForegroundColor Red
-        return
-    }
-
-    if ($null -eq $script:distributionGroup -and $attempt -eq 0) {
-        $script:distributionGroup = GetMailGroup -mailGroupAlias $mailGroupAlias
-        if (!$script:distributionGroup) {
+    try {
+        Write-Host "Processing Email"
+        if ($script:distributionGroup -eq $false -and $attempt -ge 1) {
             Write-Host "$($mailGroupAlias) does not exist" -ForegroundColor Red
             return
         }
-        
-        if ($null -eq $script:distributionGroupMembers -and $attempt -eq 0) {
-            $script:distributionGroupMembers = Get-DistributionGroupMember -Identity $distributionGroup.Id
+        if ($null -eq $script:distributionGroup -and $attempt -eq 0) {
+            $script:distributionGroup = GetMailGroup -mailGroupAlias $mailGroupAlias
+            if (!$script:distributionGroup) {
+                Write-Host "$($mailGroupAlias) does not exist" -ForegroundColor Red
+                return
+            }
+            
+            if ($null -eq $script:distributionGroupMembers -and $attempt -eq 0) {
+                $script:distributionGroupMembers = Get-DistributionGroupMember -Identity $distributionGroup.Id
+            }
+    
+            Write-Host "Processing : $($distributionGroup.Id)"
         }
-
-        Write-Host "Processing : $($distributionGroup.Id)"
-    }
-        
-    try {
         if (!($script:distributionGroupMembers.PrimarySmtpAddress -contains $row.Email)) {
             Add-DistributionGroupMember -Identity $distributionGroup.Id -Member $row.Email -BypassSecurityGroupManagerCheck -ErrorAction Stop
             $row.EmailStatus = $($SUCCESS)
@@ -67,21 +65,71 @@ function ProcessEmail ([parameter(mandatory)][System.Object]$row, [parameter(man
 
 }
 
+function ProcessMicrosoftTeamGroup ([parameter(mandatory)][System.Object]$row) {
+    try {
+        Write-Host "Processing Microsoft Team/Group"
+        $group = {
+            Get-MgGroup -Property "Id,resourceProvisioningOptions" -Filter "Mail eq '$($row.Email)'"
+        } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgGrou: $($row.Email)"
+
+        $site = {
+            Get-MgGroupSite -GroupId $group.Id -SiteId "Root" -Property $SITE_PROPERTY_REQUEST
+        } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgGroupSite Root: $($group.Id)"
+
+        $permission = New-MgSitePermission -SiteId $site.Id -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $clientAppId -applicationDisplayName $CLOUDM_ADMIN_APP -roles @("FullControl"))
+        if ((HasError -row $row -ProcessDriveError $ProcessDriveError -isUser $false)) {
+            return
+        }
+        Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
+        $isMicrosoftTeam = $false
+        if ($group.AdditionalProperties.ContainsKey("resourceProvisioningOptions")) {
+            $isMicrosoftTeam = $group.AdditionalProperties["resourceProvisioningOptions"].Contains("Team")
+        }
+        $test = @("$($site.WebUrl) - ($($site.Id))")
+        
+        if ($isMicrosoftTeam) {
+            Write-Host "Checking for Private Channels"
+            $teamChannels = Get-MgTeamChannel -TeamId $group.Id -Filter "MembershipType eq 'private'" -Property "Id" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
+            foreach ($channel in $teamChannels) {
+                $webUrl = Get-MgTeamChannelFileFolder -TeamId $group.Id -ChannelId $channel.Id -Property $SITE_PROPERTY_REQUEST
+                $webUrl = GetDriveUrl -webUrl $webUrl.WebUrl -strip 2
+                $siteId = (Get-MgAllSite -Filter "WebUrl eq '$($webUrl)'").Id
+                $permission = New-MgSitePermission -SiteId $siteId -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $clientAppId -applicationDisplayName $CLOUDM_ADMIN_APP -roles @("FullControl"))
+                if ((HasError -row $row -ProcessDriveError $ProcessDriveError -isUser $false)) {
+                    return
+                }
+                $test = $test += "$($webUrl) - ($($siteId))"
+                Write-Host (BuildPermissionMessage -permission $permission -siteId $siteId -siteUrl $webUrl) -ForegroundColor Green
+            }
+        }
+        $row.SiteUrl = ($test | Out-String)
+        $row.SiteStatus = $($SUCCESS)
+        $row.SiteErrorMessage = $NOT_APPLICABLE
+        
+    }
+    catch {
+        Write-Host "Failed to add $($row.Email). The message was: $($_)" -ForegroundColor Red
+        $row.EmailStatus = $($FAILED)
+        $row.EmailErrorMessage = $_
+    }
+    
+}
+
 function ProcessDrive ([parameter(mandatory)][System.Object]$row, [parameter(mandatory)][String]$clientAppId) {
 
     Write-Host "Processing Drive"
     $driveUrl = $null
     try {
         $drive = Get-MgUserDefaultDrive -UserId $row.Email -Property $SITE_PROPERTY_REQUEST -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError
-        if ((HasError -row $row -ProcessDriveError $ProcessDriveError)) {
+        if ((HasError -row $row -ProcessDriveError $ProcessDriveError -isUser $true)) {
             return
         }
-        $driveUrl = (GetDriveUrl -webUrl $drive.WebUrl)
+        $driveUrl = (GetDriveUrl -webUrl $drive.WebUrl -strip 1)
 
         $siteId = (Get-MgAllSite -Filter "WebUrl eq '$($driveUrl)'").Id
 
         $permission = New-MgSitePermission -SiteId $siteId -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $clientAppId -applicationDisplayName $CLOUDM_ADMIN_APP -roles @("FullControl"))
-        if ((HasError -row $row -ProcessDriveError $ProcessDriveError)) {
+        if ((HasError -row $row -ProcessDriveError $ProcessDriveError -isUser $true)) {
             return
         }
         
@@ -103,11 +151,17 @@ function ProcessDrive ([parameter(mandatory)][System.Object]$row, [parameter(man
     }
 }
 
-function HasError ([parameter(mandatory)][System.Object]$row, [parameter(mandatory)][System.Object]$ProcessDriveError) {
+function HasError ([parameter(mandatory)][System.Object]$row, [parameter(mandatory)][System.Object]$ProcessDriveError, [bool]$isUser) {
     if ($ProcessDriveError.Count -ge 1) {
         Write-Host "Failed to add $($row.Email). The message was: $($ProcessDriveError[0].Exception)" -ForegroundColor Red
-        $row.DriveStatus = $($FAILED)
-        $row.DriveErrorMessage = $ProcessDriveError[0].Exception
+        if ($isUser) {
+            $row.DriveStatus = $($FAILED)
+            $row.DriveErrorMessage = $ProcessDriveError[0].Exception
+        }
+        else {
+            $row.SiteStatus = $($FAILED)
+            $row.SiteErrorMessage = $ProcessDriveError[0].Exception
+        }
         $ProcessDriveError.Clear()
         return $true
     }
@@ -133,11 +187,13 @@ function BuildPermissionMessage ([parameter(mandatory)][Microsoft.Graph.PowerShe
     return "Site Url: $($siteUrl) ($siteId). Permission Id: $($permission.Id), Roles: $($permission.Roles)"
 }
 
-function GetDriveUrl([parameter(mandatory)][String]$webUrl) {
-    $index = $webUrl.LastIndexOf('/') 
-    if ($index -ne -1) {
-    
-        $webUrl = $webUrl.Substring(0, $index)
+function GetDriveUrl([parameter(mandatory)][String]$webUrl, [int]$strip) {
+    while ($val -ne $strip) {
+        $val++
+        $index = $webUrl.LastIndexOf('/') 
+        if ($index -ne -1) {
+            $webUrl = $webUrl.Substring(0, $index)
+        }
     }
     return $webUrl
 }
@@ -232,11 +288,11 @@ function GetCreateMailGroup([parameter(mandatory)][String]$mailGroupAlias) {
     return $distributionGroup;
 }
 
-function ProcessCsv ([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$mailGroupAlias, [parameter(mandatory)][String]$adminAppClientId, [parameter(mandatory)][String]$tenantId, [parameter(mandatory)][String]$adminAppCertificate, [parameter(mandatory)][String]$clientAppId, [SecureString] $secureCertificatePassword) {
+function ProcessEmailDriveCsv ([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$mailGroupAlias, [parameter(mandatory)][String]$adminAppClientId, [parameter(mandatory)][String]$tenantId, [parameter(mandatory)][String]$adminAppCertificate, [parameter(mandatory)][String]$clientAppId, [SecureString] $secureCertificatePassword) {
     try {
         $file = Join-Path -Path $workFolder -ChildPath "EmailDrive.csv" 
         if (!(Test-Path -Path $file -PathType Leaf)) {
-            Write-Host "File: $($file) could not be found. Exiting Process Csv" -ForegroundColor Red
+            Write-Host "File: $($file) could not be found. Exiting Process Csv" -ForegroundColor Yellow
             return;
         }   
         $nl = [Environment]::NewLine
@@ -251,7 +307,7 @@ function ProcessCsv ([parameter(mandatory)][String]$workFolder, [parameter(manda
         Start-Sleep -Seconds 5
         $site = ProcessRootSite
         ProcessMySite -site $site
-        Write-Host "$($nl)$($nl)--------------------------------Processing Csv-----------------------------------------"
+        Write-Host "$($nl)$($nl)--------------------------------Processing EmailDrive.csv-----------------------------------------"
         foreach ($row in $csv) {
             $row | Add-Member -NotePropertyName "EmailStatus" -NotePropertyValue $NOT_APPLICABLE -Force
             $row | Add-Member -NotePropertyName "EmailErrorMessage" -NotePropertyValue $NOT_APPLICABLE -Force
@@ -291,14 +347,43 @@ function ProcessCsv ([parameter(mandatory)][String]$workFolder, [parameter(manda
     }
 }
 
-Export-ModuleMember -Function ProcessCsv
+function ProcessMicrosoftTeamGroupCsv ([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$adminAppClientId, [parameter(mandatory)][String]$tenantId, [parameter(mandatory)][String]$adminAppCertificate, [parameter(mandatory)][String]$clientAppId, [SecureString] $secureCertificatePassword) {
+    try {
+        $file = Join-Path -Path $workFolder -ChildPath "MicrosoftTeamGroup.csv" 
+        if (!(Test-Path -Path $file -PathType Leaf)) {
+            Write-Host "File: $($file) could not be found. Exiting Process Csv" -ForegroundColor Yellow
+            return;
+        }   
+        $nl = [Environment]::NewLine
+       
+        $csv = Import-Csv $file
+        $counter = 0
+        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($adminAppCertificate, $secureCertificatePassword)
+        {
+            Connect-MgGraph -ClientId $adminAppClientId -TenantId $tenantId -Certificate $cert -NoWelcome -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
+            CheckErrors -ErrorToProcess $ErrorResult
+        } | RetryCommand -TimeoutInSeconds 10 -RetryCount 10 -Context "Connect to MgGraph: $($CLOUDM_ADMIN_APP)"
+        Start-Sleep -Seconds 5
+        Write-Host "$($nl)$($nl)--------------------------------Processing MicrosoftTeamGroup.csv-----------------------------------------"
+        foreach ($row in $csv) {
+            $row | Add-Member -NotePropertyName "SiteUrl" -NotePropertyValue $NOT_APPLICABLE -Force
+            $row | Add-Member -NotePropertyName "SiteStatus" -NotePropertyValue $NOT_APPLICABLE -Force
+            $row | Add-Member -NotePropertyName "SiteErrorMessage" -NotePropertyValue $NOT_APPLICABLE -Force
+            Write-Host "$($nl)$($nl)--------------------------------Processing $($row.Email) Starting-----------------------------------------"
+            ProcessMicrosoftTeamGroup -row $row
+            Write-Host "--------------------------------Processing $($row.Email) Completed-----------------------------------------"
+            $counter++
+        }
+        $csv | Export-Csv $file -NoType
+    }
+    finally {
+        Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+        Write-Host "Disconnect-MgGraph $($CLOUDM_ADMIN_APP)"
+        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+        Write-Host "Disconnect-ExchangeOnline"
+    }
+}
+
+Export-ModuleMember -Function ProcessEmailDriveCsv
 Export-ModuleMember -Function ApplyLimitedMailPolicy
-
-    
-  
-        
-    
-    
-
-
-
+Export-ModuleMember -Function ProcessMicrosoftTeamGroupCsv
