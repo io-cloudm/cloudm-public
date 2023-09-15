@@ -92,7 +92,7 @@ function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$ro
         if ($group.AdditionalProperties.ContainsKey("resourceProvisioningOptions")) {
             $isMicrosoftTeam = $group.AdditionalProperties["resourceProvisioningOptions"].Contains("Team")
         }
-        $success = @("$($site.WebUrl) - ($($site.Id))")
+        $successSiteUrls = @("$($site.WebUrl) - ($($site.Id))")
         
         if ($isMicrosoftTeam) {
             Write-Host "Checking for Private Channels"
@@ -123,11 +123,11 @@ function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$ro
                     $ErrorResult.Clear()
                     continue
                 }
-                $success += "$($webUrl) - ($($siteId))"
+                $successSiteUrls += "$($webUrl) - ($($siteId))"
                 Write-Host (BuildPermissionMessage -permission $permission -siteId $siteId -siteUrl $webUrl) -ForegroundColor Green
             }
         }
-        $row.SiteUrl = ($success | Out-String)
+        $row.SiteUrl = ($successSiteUrls | Out-String)
         if ($privateChannelErrors.Count -ge 1) {
             $row.SiteStatus = $($WARNING)
             $row.SiteErrorMessage = ($privateChannelErrors | Out-String)
