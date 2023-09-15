@@ -17,10 +17,6 @@ function ImportModules([parameter(mandatory)][String]$moduleName,
 
     }
     else {
-      
-        #Check the version. We need Version 2.0.0 to be installed. If any other version (newer or older) is installed, we need to reinstall 2.0.0 
-        #(No need to delete, a reinstall will upgrade to 2.0.0)
-        #This is related to issue CMT-6388
         $stringVersion = (Get-InstalledModule $moduleName).Version.ToString()
         Write-Progress "$moduleName module is already installed with the version " 
         Write-Progress $stringVersion
@@ -516,20 +512,21 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
             $policy = ApplyLimitedMailPolicy -appId $appId -certPath $certPath -secureCertificatePassword $secureCertificatePassword -tenantName $app.PublisherDomain -appName $appName -mailGroupAlias $mailGroupAlias
             $adminApp = CreateRegistrationAdminApp -appName "CloudM Admin App" -workFolder $workFolder -certName "CloudM Admin App" -secureCertificatePassword $secureCertificatePassword
             $tenantId = (Get-MgDomain | Where-Object { $_.isInitial }).Id
-            ProcessEmailDriveCsv -workFolder $workFolder -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId
-            ProcessMicrosoftTeamGroupCsv -workFolder $workFolder -secureCertificatePassword $secureCertificatePassword -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId
+
+            ProcessCsv -workFolder $workFolder -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId
+            
             $destinationPath = Join-Path -Path $workFolder -ChildPath "$($adminApp.App.DisplayName) - $($adminApp.App.PublisherDomain)"
             New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
             $adminAppCertPath = $destinationPath + "\" + $adminApp.App.DisplayName + ".pfx"
             
             OutPutFile -app $adminApp.App -certPath $adminAppCertPath -secureCertificatePassword $secureCertificatePassword -policy $policy
-            MoveFiles -sourceFolder $workFolder -appName $adminApp.App.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath
+            MoveFiles -sourceFolder $workFolder -appName $adminApp.App.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath -limitedScope $limitedScope
         }
         $destinationPath = Join-Path -Path $workFolder -ChildPath "$($app.DisplayName) - $($app.PublisherDomain)"
         New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
         $appCertPath = $destinationPath + "\" + $certName + ".pfx"
         OutPutFile -app $app -certPath $appCertPath -secureCertificatePassword $secureCertificatePassword
-        MoveFiles -sourceFolder $workFolder -appName $app.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath -limitedScope $limitedScope
+        MoveFiles -sourceFolder $workFolder -appName $app.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath
         
         
     }
@@ -543,7 +540,7 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
     }
 }
 function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$publisherDomain, [bool]$limitedScope, [string]$destinationPath) {
-    Get-ChildItem -File -Recurse -Path $sourceFolder |
+    Get-ChildItem -File -Path $sourceFolder |
     ForEach-Object {
         if ($_.Name -match "^$($appName)") {
             Write-Host "Moving $($_.FullName) > ($($destinationPath))"
@@ -557,6 +554,26 @@ function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(manda
         Copy-Item "$($file)" -Destination "$($newFile)"
         (Import-CSV $file -Header Email, ItemType | 
         Select-Object "Email", "ItemType" | 
+        ConvertTo-Csv -NoTypeInformation | 
+        Select-Object -Skip 1) -replace '"' | Set-Content $file
+    }
+    $file = Join-Path -Path $workFolder -ChildPath "SharePointSites.csv" 
+    if ($limitedScope -and (Test-Path -Path $file -PathType Leaf)) {
+        $newFile = "$($destinationPath)\SharePointSites - $($publisherDomain) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
+        Write-Host "Copying $($file) > $($newFile)"
+        Copy-Item "$($file)" -Destination "$($newFile)"
+        (Import-CSV $file -Header SiteUrl, ItemType | 
+        Select-Object "SiteUrl" | 
+        ConvertTo-Csv -NoTypeInformation | 
+        Select-Object -Skip 1) -replace '"' | Set-Content $file
+    }
+    $file = Join-Path -Path $workFolder -ChildPath "MicrosoftTeamGroup.csv" 
+    if ($limitedScope -and (Test-Path -Path $file -PathType Leaf)) {
+        $newFile = "$($destinationPath)\MicrosoftTeamGroup - $($publisherDomain) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
+        Write-Host "Copying $($file) > $($newFile)"
+        Copy-Item "$($file)" -Destination "$($newFile)"
+        (Import-CSV $file -Header Email, MicrosoftTeamGroupItemType | 
+        Select-Object "Email", "MicrosoftTeamGroupItemType" | 
         ConvertTo-Csv -NoTypeInformation | 
         Select-Object -Skip 1) -replace '"' | Set-Content $file
     }

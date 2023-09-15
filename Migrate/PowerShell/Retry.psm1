@@ -17,7 +17,6 @@
         do {
             try {
                 Invoke-Command -ScriptBlock $ScriptBlock -OutVariable Result
-                Write-Host "$context executed successfully"              
                 break;
             }
             catch {
