@@ -513,7 +513,17 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
             $adminApp = CreateRegistrationAdminApp -appName "CloudM Admin App" -workFolder $workFolder -certName "CloudM Admin App" -secureCertificatePassword $secureCertificatePassword
             $tenantId = (Get-MgDomain | Where-Object { $_.isInitial }).Id
 
-            ProcessCsv -workFolder $workFolder -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias -adminAppClientId $adminApp.App.AppId -tenantId $tenantId -adminAppCertificate $adminApp.CertPath -clientAppId $appId
+            $ProcessCsvParameters = @{
+                WorkFolder                = $workFolder
+                SecureCertificatePassword = $secureCertificatePassword
+                MailGroupAlias            = $mailGroupAlias
+                AdminAppClientId          = $adminApp.App.AppId
+                TenantId                  = $tenantId
+                AdminAppCertificate       = $adminApp.CertPath
+                ClientAppId               = $appId
+                ClientAppCertificate      = $certPath
+            }
+            ProcessCsv @ProcessCsvParameters
             
             $destinationPath = Join-Path -Path $workFolder -ChildPath "$($adminApp.App.DisplayName) - $($adminApp.App.PublisherDomain)"
             New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
@@ -525,7 +535,7 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         $destinationPath = Join-Path -Path $workFolder -ChildPath "$($app.DisplayName) - $($app.PublisherDomain)"
         New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
         $appCertPath = $destinationPath + "\" + $certName + ".pfx"
-        OutPutFile -app $app -certPath $appCertPath -secureCertificatePassword $secureCertificatePassword
+        OutPutFile -app $app -certPath $appCertPath -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias
         MoveFiles -sourceFolder $workFolder -appName $app.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath  -limitedScope $limitedScope
     }
     catch {
@@ -579,22 +589,20 @@ function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(manda
 
 function ImportCloudMModules ([String]$workFolder, [bool]$limitedScope) {
     
-    $retryPms1 = Join-Path -Path $workFolder -ChildPath "Retry.psm1" 
+    $retryPms1 = Join-Path -Path $workFolder -ChildPath "CloudM-Retry.psm1" 
     if (!(Test-Path -Path $retryPms1 -PathType Leaf)) {
         throw (New-Object System.IO.FileNotFoundException("File not found: $retryPms1", $retryPms1))
     }
     else {
-        Write-Host "Import Retry Module"
-        Import-Module .\Retry -Force
+        Import-Module .\CloudM-Retry -Force
     }
     if ($limitedScope) {
-        $processEmailDrive = Join-Path -Path $workFolder -ChildPath "ProcessEmailDrive.psm1" 
+        $processEmailDrive = Join-Path -Path $workFolder -ChildPath "CloudM-ProcessCsvs.psm1" 
         if (!(Test-Path -Path $processEmailDrive -PathType Leaf)) {
             throw (New-Object System.IO.FileNotFoundException("File not found: $processEmailDrive", $processEmailDrive))
         }
         else {
-            Write-Host "Import ProcessEmailDrive Module"
-            Import-Module .\ProcessEmailDrive -Force
+            Import-Module .\CloudM-ProcessCsvs -Force
         }
     }
 }
@@ -634,7 +642,7 @@ function CreateRegistrationAdminApp([parameter(mandatory)][String]$appName, [par
     }
 }
 
-function OutPutFile([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphApplication]$app, [parameter(mandatory)][String]$certPath, [PSObject]$policy, [SecureString]$secureCertificatePassword) {
+function OutPutFile([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphApplication]$app, [parameter(mandatory)][String]$certPath, [String]$mailGroupAlias, [PSObject]$policy, [SecureString]$secureCertificatePassword) {
     $nl = [Environment]::NewLine
     $output = ($nl + $nl + "Client ID: " + $app.AppId + ", App Name: " + $app.DisplayName)
     $output += ($nl + "Certificate Path: " + $certPath)
@@ -642,9 +650,12 @@ function OutPutFile([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMi
         $output += ($nl + "Certificate Password: " + [System.Net.NetworkCredential]::new("", $secureCertificatePassword).Password)
     }
     if ($policy) {
-        $output += ($nl + "Policy Created for: " + $policy.ScopeName + " with " + $policy.AccessRight)
+        $output += ($nl + "Policy Created for: $($policy.ScopeName) with $($policy.AccessRight)")
     }
-    $output = $nl + $nl + "Azure AD application registered." + $output
+    if ($mailGroupAlias) {
+        $output += ($nl + "Mail Group Alias: $($mailGroupAlias)")
+    }
+    $output = $nl + $nl + "Azure AD application registered. $($output)"
     Write-Host $output -ForegroundColor Green
     $output | Out-File -FilePath "$workFolder\$($app.DisplayName)$($app.PublishName).txt"
 }
@@ -700,5 +711,5 @@ function CreateAzureAppRegistration() {
 }
 
 #CreateAzureAppRegistration
-CreateAppRegistration -workFolder "C:\CloudM" -appName "LimitedTestApp" -azureEnvironment "0" -limitedScope -certificatePassword ""
-
+CreateAppRegistration -workFolder "C:\Projects\cloudm-public\Migrate\PowerShell" -appName "LimitedTestApp" -azureEnvironment "0" -limitedScope -certificatePassword ""
+#CreateAppRegistration -workFolder "C:\Projects\cloudm-public\Migrate\PowerShell" -appName "AshleyDev" -azureEnvironment "0" -certificatePassword ""
