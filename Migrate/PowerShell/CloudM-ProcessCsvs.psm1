@@ -9,7 +9,6 @@ New-Variable -Name SITE_PROPERTY_REQUEST -Value "id,webUrl"
 
 $script:DistributionGroup = $null
 $script:DistributionGroupMembers = $null
-$script:AppContext = $null
 enum ItemType {
     Drive
     Email
@@ -355,13 +354,15 @@ function ProcessEmailDriveCsv (
     [SecureString]$SecureCertificatePassword, 
     [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {
     try {
-        Remove-Variable * -ErrorAction SilentlyContinue
+        
         $file = Join-Path -Path $WorkFolder -ChildPath "EmailDrive.csv" 
         if (!(Test-Path -Path $file -PathType Leaf)) {
             Write-Host "File: $($file) could not be found. Exiting Process Csv" -ForegroundColor Yellow
             return;
         }
         $nl = [Environment]::NewLine
+        $script:DistributionGroup = $null
+        $script:DistributionGroupMembers = $null
         ConnectMsGraph -AdminAppClientId $AdminAppClientId -AdminAppCertificate $AdminAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantId $TenantId
         ConnectExchangeOnline -AppId $ClientAppId -CertPath $ClientAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantName $TenantId
         $csv = Import-Csv $file
@@ -422,13 +423,14 @@ function ProcessMicrosoftTeamGroupCsv (
     [SecureString]$SecureCertificatePassword, 
     [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {
     try {
-        Remove-Variable * -ErrorAction SilentlyContinue
+        
         $file = Join-Path -Path $WorkFolder -ChildPath "MicrosoftTeamGroup.csv" 
         if (!(Test-Path -Path $file -PathType Leaf)) {
             Write-Host "File: $($file) could not be found. Exiting Process Csv" -ForegroundColor Yellow
             return;
         }
-        
+        $script:DistributionGroup = $null
+        $script:DistributionGroupMembers = $null
         $initEmailCounter = 0   
         $nl = [Environment]::NewLine
         ConnectMsGraph -AdminAppClientId $AdminAppClientId -AdminAppCertificate $AdminAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantId $TenantId
@@ -486,7 +488,7 @@ function ProcessSharePointSiteCsv (
     [SecureString]$SecureCertificatePassword, 
     [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {
     try {
-        Remove-Variable * -ErrorAction SilentlyContinue
+        
         $file = Join-Path -Path $WorkFolder -ChildPath "SharePointSites.csv" 
         if (!(Test-Path -Path $file -PathType Leaf)) {
             Write-Host "File: $($file) could not be found. Exiting Process Csv" -ForegroundColor Yellow
