@@ -711,5 +711,4 @@ function CreateAzureAppRegistration() {
 }
 
 #CreateAzureAppRegistration
-CreateAppRegistration -workFolder "C:\Projects\cloudm-public\Migrate\PowerShell" -appName "LimitedTestApp" -azureEnvironment "0" -limitedScope -certificatePassword ""
-#CreateAppRegistration -workFolder "C:\Projects\cloudm-public\Migrate\PowerShell" -appName "AshleyDev" -azureEnvironment "0" -certificatePassword ""
+CreateAppRegistration -workFolder "C:\Working" -appName "LimitedTestApp" -azureEnvironment "0" -limitedScope -certificatePassword ""
