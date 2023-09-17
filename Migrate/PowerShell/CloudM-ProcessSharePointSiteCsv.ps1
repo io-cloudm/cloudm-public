@@ -113,23 +113,9 @@ $TenantId = "test365.cloudm.io"
 $ClientAppId = "03cb630a-cb4e-43c2-a38b-b0eadc289ad2"
 $AdminAppClientId = "ad583816-4d3f-480d-b5b5-2e203427fe83"
 $AdminAppCertificate = "C:\Projects\cloudm-public\Migrate\PowerShell\CloudM Admin App - test365.cloudm.io\CloudM Admin App.pfx"
-$ClientAppCertificate = "C:\Projects\cloudm-public\Migrate\PowerShell\CloudM-LimitedTestApp - test365.cloudm.io\CloudM-LimitedTestApp-test365.cloudm.io.pfx"
-
 
 ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
 
-
-$ProcessEmailDriveCsv = @{
-    WorkFolder                = $WorkFolder
-    SecureCertificatePassword = GetSecurePassword("")
-    MailGroupAlias            = $MailGroupAlias
-    AdminAppClientId          = $AdminAppClientId
-    TenantId                  = $TenantId
-    AdminAppCertificate       = $AdminAppCertificate
-    ClientAppId               = $ClientAppId
-    ClientAppCertificate      = $ClientAppCertificate
-}
-ProcessEmailDriveCsv @ProcessEmailDriveCsv -DisconnectSesstion
 
 $ProcessSharePointSiteCsv = @{
     WorkFolder                = $WorkFolder
@@ -140,20 +126,6 @@ $ProcessSharePointSiteCsv = @{
     ClientAppId               = $ClientAppId
 }
 ProcessSharePointSiteCsv @ProcessSharePointSiteCsv -DisconnectSesstion
-
-$ProcessMicrosoftTeamGroupCsv = @{
-    WorkFolder                = $WorkFolder
-    SecureCertificatePassword = GetSecurePassword("")
-    MailGroupAlias            = $MailGroupAlias
-    AdminAppClientId          = $AdminAppClientId
-    TenantId                  = $TenantId
-    AdminAppCertificate       = $AdminAppCertificate
-    ClientAppId               = $ClientAppId
-    ClientAppCertificate      = $ClientAppCertificate
-}
-
-ProcessMicrosoftTeamGroupCsv @ProcessMicrosoftTeamGroupCsv -DisconnectSesstion
-
 
 #Copy Reports
 MoveFiles -sourceFolder $WorkFolder -appName $MailGroupAlias -publisherDomain $TenantId
