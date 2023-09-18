@@ -174,7 +174,7 @@ function GetMicrosoftGraphApiPermissionsAdminApp() {
 
 function GetMicrosoftGraphPermissionsRolesAdminApp() {
     [string[]]$roles = @(
-        "a82116e5-55eb-4c41-a434-62fe8a61c773"
+        "a82116e5-55eb-4c41-a434-62fe8a61c773", "5b567255-7703-4780-807c-7be8301ae99b"
     )
     return $roles
 }
