@@ -271,7 +271,7 @@ function ProcessRootSite() {
 }
 
 function ProcessMySite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site) {
-    $siteId = GetMySiteHost -id $site.Id
+    $siteId = GetHost -id $site.Id -insertUrl "-my"
     $site = { 
         Get-MgSite -SiteId $siteId -Property $SITE_PROPERTY_REQUEST -ErrorVariable ErrorResult
         CheckErrors -ErrorToProcess $ErrorResult
@@ -284,16 +284,29 @@ function ProcessMySite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.
     Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
 }
 
-function GetMySiteHost([parameter(mandatory)][String]$id) {
+function ProcessAdminSite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site) {
+    $siteId = GetHost -id $site.Id -insertUrl "-admin"
+    $site = { 
+        Get-MgSite -SiteId $siteId -Property $SITE_PROPERTY_REQUEST -ErrorVariable ErrorResult
+        CheckErrors -ErrorToProcess $ErrorResult
+    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgSite: $($siteId)"
+        
+    $permission = {
+        New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $ClientAppId -applicationDisplayName $CLOUDM_ADMIN_APP -roles @("FullControl")) -ErrorVariable ErrorResult
+        CheckErrors -ErrorToProcess $ErrorResult
+    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "New-MgSitePermission: $($site.Id)"
+    Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
+}
+
+function GetHost([parameter(mandatory)][String]$id, [parameter(mandatory)][string]$insertUrl) {
     $index = $id.IndexOf(',') 
     $mySiteHost = $null
     if ($index -ne -1) {
         $mySiteHost = $id.Substring(0, $index)
         $index = $mySiteHost.IndexOf('.')
         if ($index -ne -1) {
-            $mySiteHost = $mySiteHost.Insert($index, "-my")
+            $mySiteHost = $mySiteHost.Insert($index, $insertUrl)
         }
-    
     }
     return $mySiteHost
 }
@@ -435,6 +448,8 @@ function ProcessMicrosoftTeamGroupCsv (
         $nl = [Environment]::NewLine
         ConnectMsGraph -AdminAppClientId $AdminAppClientId -AdminAppCertificate $AdminAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantId $TenantId
         ConnectExchangeOnline -AppId $ClientAppId -CertPath $ClientAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantName $TenantId
+        $site = ProcessRootSite
+        ProcessAdminSite -site $site
         $csv = Import-Csv $file
         Write-Host "$($nl)$($nl)--------------------------------Processing MicrosoftTeamGroup.csv-----------------------------------------"
         foreach ($Row in $csv) {
@@ -496,6 +511,8 @@ function ProcessSharePointSiteCsv (
         }   
         $nl = [Environment]::NewLine
         ConnectMsGraph -AdminAppClientId $AdminAppClientId -AdminAppCertificate $AdminAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantId $TenantId
+        $site = ProcessRootSite
+        ProcessAdminSite -site $site
         $csv = Import-Csv $file
         Write-Host "$($nl)$($nl)--------------------------------Processing SharePointSites.csv-----------------------------------------"
         foreach ($Row in $csv) {
