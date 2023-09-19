@@ -65,6 +65,7 @@ function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
 
 function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$publisherDomain) {
     $destinationPath = Join-Path -Path $workFolder -ChildPath "$($appName) - $($publisherDomain)"
+    New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
     $file = Join-Path -Path $workFolder -ChildPath "EmailDrive.csv" 
     if ((Test-Path -Path $file -PathType Leaf)) {
         $newFile = "$($destinationPath)\EmailDrive - $($publisherDomain) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"

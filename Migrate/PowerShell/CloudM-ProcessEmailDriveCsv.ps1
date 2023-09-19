@@ -65,6 +65,7 @@ function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
 
 function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$publisherDomain) {
     $destinationPath = Join-Path -Path $workFolder -ChildPath "$($appName) - $($publisherDomain)"
+    New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
     $file = Join-Path -Path $workFolder -ChildPath "EmailDrive.csv" 
     if ((Test-Path -Path $file -PathType Leaf)) {
         $newFile = "$($destinationPath)\EmailDrive - $($publisherDomain) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
@@ -108,12 +109,12 @@ function GetSecurePassword ($password) {
 }
 
 $WorkFolder = "C:\Projects\cloudm-public\Migrate\PowerShell"
-$MailGroupAlias = "CloudM-LimitedTestApp"
-$TenantId = "test365.cloudm.io"
-$ClientAppId = "03cb630a-cb4e-43c2-a38b-b0eadc289ad2"
-$AdminAppClientId = "ad583816-4d3f-480d-b5b5-2e203427fe83"
-$AdminAppCertificate = "C:\Projects\cloudm-public\Migrate\PowerShell\CloudM Admin App - test365.cloudm.io\CloudM Admin App.pfx"
-$ClientAppCertificate = "C:\Projects\cloudm-public\Migrate\PowerShell\CloudM-LimitedTestApp - test365.cloudm.io\CloudM-LimitedTestApp-test365.cloudm.io.pfx"
+$MailGroupAlias = "CloudM-LimitedTestAppAshley"
+$TenantId = "8yfwqw.onmicrosoft.com"
+$AdminAppClientId = "d84ef138-7696-4fec-831a-753b526a5149"
+$AdminAppCertificate = "C:\Users\AshleyBrazier\Documents\CloudConfig\CloudM Admin App - 8yfwqw.onmicrosoft.com\CloudM Admin App.pfx"
+$ClientAppId = "51425ac2-006b-4831-895d-124306b7aeeb"
+$ClientAppCertificate = "C:\Users\AshleyBrazier\Documents\CloudConfig\CloudM-LimitedTestAppAshley - 8yfwqw.onmicrosoft.com\CloudM-LimitedTestAppAshley-8yfwqw.onmicrosoft.com.pfx"
 
 
 ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
