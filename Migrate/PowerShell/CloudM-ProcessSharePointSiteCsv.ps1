@@ -63,36 +63,16 @@ function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
     }
 }
 
-function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$publisherDomain) {
-    $destinationPath = Join-Path -Path $workFolder -ChildPath "$($appName) - $($publisherDomain)"
+function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$ClientAppId) {
+    $destinationPath = Join-Path -Path $workFolder -ChildPath "$($ClientAppId)"
     New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
-    $file = Join-Path -Path $workFolder -ChildPath "EmailDrive.csv" 
-    if ((Test-Path -Path $file -PathType Leaf)) {
-        $newFile = "$($destinationPath)\EmailDrive - $($publisherDomain) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
-        Write-Host "Copying $($file) > $($newFile)"
-        Copy-Item "$($file)" -Destination "$($newFile)"
-        (Import-CSV $file -Header Email, ItemType | 
-        Select-Object "Email", "ItemType" | 
-        ConvertTo-Csv -NoTypeInformation | 
-        Select-Object -Skip 1) -replace '"' | Set-Content $file
-    }
     $file = Join-Path -Path $workFolder -ChildPath "SharePointSites.csv" 
     if ((Test-Path -Path $file -PathType Leaf)) {
-        $newFile = "$($destinationPath)\SharePointSites - $($publisherDomain) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
+        $newFile = "$($destinationPath)\SharePointSites - $($ClientAppId) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
         Write-Host "Copying $($file) > $($newFile)"
         Copy-Item "$($file)" -Destination "$($newFile)"
         (Import-CSV $file -Header SiteUrl, ItemType | 
         Select-Object "SiteUrl" | 
-        ConvertTo-Csv -NoTypeInformation | 
-        Select-Object -Skip 1) -replace '"' | Set-Content $file
-    }
-    $file = Join-Path -Path $workFolder -ChildPath "MicrosoftTeamGroup.csv" 
-    if ((Test-Path -Path $file -PathType Leaf)) {
-        $newFile = "$($destinationPath)\MicrosoftTeamGroup - $($publisherDomain) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
-        Write-Host "Copying $($file) > $($newFile)"
-        Copy-Item "$($file)" -Destination "$($newFile)"
-        (Import-CSV $file -Header Email, MicrosoftTeamGroupItemType | 
-        Select-Object "Email", "MicrosoftTeamGroupItemType" | 
         ConvertTo-Csv -NoTypeInformation | 
         Select-Object -Skip 1) -replace '"' | Set-Content $file
     }
@@ -109,11 +89,9 @@ function GetSecurePassword ($password) {
 }
 
 $WorkFolder = "C:\Projects\cloudm-public\Migrate\PowerShell"
-$MailGroupAlias = "CloudM-LimitedTestApp"
-$TenantId = "test365.cloudm.io"
-$ClientAppId = "03cb630a-cb4e-43c2-a38b-b0eadc289ad2"
-$AdminAppClientId = "ad583816-4d3f-480d-b5b5-2e203427fe83"
-$AdminAppCertificate = "C:\Projects\cloudm-public\Migrate\PowerShell\CloudM Admin App - test365.cloudm.io\CloudM Admin App.pfx"
+$ClientAppId = "f31a2a1c-cceb-4d6f-af44-a1dc4f2c20ec"
+$Environment = "Global"
+$ClientAppName = "Test"
 
 ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
 
@@ -121,12 +99,11 @@ ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
 $ProcessSharePointSiteCsv = @{
     WorkFolder                = $WorkFolder
     SecureCertificatePassword = GetSecurePassword("")
-    AdminAppClientId          = $AdminAppClientId
-    TenantId                  = $TenantId
-    AdminAppCertificate       = $AdminAppCertificate
     ClientAppId               = $ClientAppId
+    Environment               = $Environment
+    ClientAppName             = $ClientAppName
 }
 ProcessSharePointSiteCsv @ProcessSharePointSiteCsv -DisconnectSesstion
 
 #Copy Reports
-MoveFiles -sourceFolder $WorkFolder -appName $MailGroupAlias -publisherDomain $TenantId
+MoveFiles -sourceFolder $WorkFolder -ClientAppId $ClientAppId

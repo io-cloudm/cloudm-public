@@ -63,32 +63,12 @@ function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
     }
 }
 
-function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$publisherDomain) {
-    $destinationPath = Join-Path -Path $workFolder -ChildPath "$($appName) - $($publisherDomain)"
+function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$ClientAppId) {
+    $destinationPath = Join-Path -Path $workFolder -ChildPath "$($ClientAppId)"
     New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
-    $file = Join-Path -Path $workFolder -ChildPath "EmailDrive.csv" 
-    if ((Test-Path -Path $file -PathType Leaf)) {
-        $newFile = "$($destinationPath)\EmailDrive - $($publisherDomain) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
-        Write-Host "Copying $($file) > $($newFile)"
-        Copy-Item "$($file)" -Destination "$($newFile)"
-        (Import-CSV $file -Header Email, ItemType | 
-        Select-Object "Email", "ItemType" | 
-        ConvertTo-Csv -NoTypeInformation | 
-        Select-Object -Skip 1) -replace '"' | Set-Content $file
-    }
-    $file = Join-Path -Path $workFolder -ChildPath "SharePointSites.csv" 
-    if ((Test-Path -Path $file -PathType Leaf)) {
-        $newFile = "$($destinationPath)\SharePointSites - $($publisherDomain) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
-        Write-Host "Copying $($file) > $($newFile)"
-        Copy-Item "$($file)" -Destination "$($newFile)"
-        (Import-CSV $file -Header SiteUrl, ItemType | 
-        Select-Object "SiteUrl" | 
-        ConvertTo-Csv -NoTypeInformation | 
-        Select-Object -Skip 1) -replace '"' | Set-Content $file
-    }
     $file = Join-Path -Path $workFolder -ChildPath "MicrosoftTeamGroup.csv" 
     if ((Test-Path -Path $file -PathType Leaf)) {
-        $newFile = "$($destinationPath)\MicrosoftTeamGroup - $($publisherDomain) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
+        $newFile = "$($destinationPath)\MicrosoftTeamGroup - $($ClientAppId) - $(Get-Date -UFormat %d-%m-%Y-%H.%M.%S).csv"
         Write-Host "Copying $($file) > $($newFile)"
         Copy-Item "$($file)" -Destination "$($newFile)"
         (Import-CSV $file -Header Email, MicrosoftTeamGroupItemType | 
@@ -109,14 +89,12 @@ function GetSecurePassword ($password) {
 }
 
 $WorkFolder = "C:\Projects\cloudm-public\Migrate\PowerShell"
-$MailGroupAlias = "CloudM-LimitedTestApp"
-$TenantId = "test365.cloudm.io"
-$AdminAppClientId = "d84ef138-7696-4fec-831a-753b526a5149"
-$AdminAppCertificate = "C:\Projects\cloudm-public\Migrate\PowerShell\CloudM Admin App - 8yfwqw.onmicrosoft.com\CloudM Admin App.pfx"
-$ClientAppId = "51425ac2-006b-4831-895d-124306b7aeeb"
-$ClientAppCertificate = "C:\Projects\cloudm-public\Migrate\PowerShell\CloudM-LimitedTestAppAshley - 8yfwqw.onmicrosoft.com\CloudM-LimitedTestAppAshley-8yfwqw.onmicrosoft.com.pfx"
-
-
+$MailGroupAlias = "CloudM-LimitedTestAppAshley"
+$TenantName = "test365.cloudm.io"
+$ClientAppId = "f31a2a1c-cceb-4d6f-af44-a1dc4f2c20ec"
+$ClientAppCertificate = "C:\Projects\cloudm-public\Migrate\PowerShell\CloudM-LimitedTestAppAshley - test365.cloudm.io\CloudM-LimitedTestAppAshley-test365.cloudm.io.pfx"
+$Environment = "Global"
+$ClientAppName = "Test"
 ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
 
 
@@ -124,15 +102,15 @@ $ProcessMicrosoftTeamGroupCsv = @{
     WorkFolder                = $WorkFolder
     SecureCertificatePassword = GetSecurePassword("")
     MailGroupAlias            = $MailGroupAlias
-    AdminAppClientId          = $AdminAppClientId
-    TenantId                  = $TenantId
-    AdminAppCertificate       = $AdminAppCertificate
     ClientAppId               = $ClientAppId
     ClientAppCertificate      = $ClientAppCertificate
+    Environment               = $Environment
+    ClientAppName             = $ClientAppName
+    TenantName                = $TenantName
 }
 
 ProcessMicrosoftTeamGroupCsv @ProcessMicrosoftTeamGroupCsv -DisconnectSesstion
 
 
 #Copy Reports
-MoveFiles -sourceFolder $WorkFolder -appName $MailGroupAlias -publisherDomain $TenantId
+MoveFiles -sourceFolder $WorkFolder -ClientAppId $ClientAppId
