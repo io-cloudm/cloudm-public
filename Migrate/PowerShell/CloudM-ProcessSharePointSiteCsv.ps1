@@ -64,7 +64,7 @@ function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
 }
 
 function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$ClientAppId) {
-    $destinationPath = Join-Path -Path $workFolder -ChildPath "$($ClientAppId)"
+    $destinationPath = Join-Path -Path $workFolder -ChildPath "CloudM-Limited-App-$($ClientAppId)"
     New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
     $file = Join-Path -Path $workFolder -ChildPath "SharePointSites.csv" 
     if ((Test-Path -Path $file -PathType Leaf)) {
@@ -91,7 +91,6 @@ function GetSecurePassword ($password) {
 $WorkFolder = "C:\Projects\cloudm-public\Migrate\PowerShell"
 $ClientAppId = "f31a2a1c-cceb-4d6f-af44-a1dc4f2c20ec"
 $Environment = "Global"
-$ClientAppName = "Test"
 
 ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
 
@@ -101,7 +100,6 @@ $ProcessSharePointSiteCsv = @{
     SecureCertificatePassword = GetSecurePassword("")
     ClientAppId               = $ClientAppId
     Environment               = $Environment
-    ClientAppName             = $ClientAppName
 }
 ProcessSharePointSiteCsv @ProcessSharePointSiteCsv -DisconnectSesstion
 

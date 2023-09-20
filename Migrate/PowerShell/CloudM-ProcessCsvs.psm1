@@ -70,7 +70,7 @@ function ProcessEmail ([parameter(mandatory)][System.Object]$Row, [parameter(man
 
 }
 
-function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId, [parameter(mandatory)][String]$ClientAppName, [parameter(mandatory)][String]$TenantHost) {
+function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId, [parameter(mandatory)][String]$TenantHost) {
     try {
         Write-Host "Processing Microsoft Team/Group"
         $group = {
@@ -81,7 +81,7 @@ function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Ro
             Get-MgGroupSite -GroupId $group.Id -SiteId "Root" -Property $SITE_PROPERTY_REQUEST
         } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgGroupSite Root: $($group.Id)"
 
-        $permission = New-MgSitePermission -SiteId $site.Id -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $ClientAppId -applicationDisplayName $ClientAppName -roles @("FullControl"))
+        $permission = New-MgSitePermission -SiteId $site.Id -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("FullControl"))
         if ((HasError -Row $Row -ProcessDriveError $ProcessDriveError -isUser $false)) {
             return
         }
@@ -116,7 +116,7 @@ function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Ro
                     $ErrorResult.Clear()
                     continue
                 }
-                $permission = New-MgSitePermission -SiteId $siteId -ErrorAction SilentlyContinue -ErrorVariable ErrorResult -BodyParameter (BuildPermission -applicationId $ClientAppId -applicationDisplayName $ClientAppName -roles @("FullControl"))
+                $permission = New-MgSitePermission -SiteId $siteId -ErrorAction SilentlyContinue -ErrorVariable ErrorResult -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("FullControl"))
                 if ($ErrorResult.Count -ge 1) {
                     Write-Host "Channel: $($channel.DisplayName) failed with $($ErrorResult[0].Exception)" -ForegroundColor Red
                     $privateChannelErrors += "Private Channel: $($channel.DisplayName) failed with: $($ErrorResult[0].Exception)"
@@ -146,7 +146,7 @@ function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Ro
   
 }
 
-function ProcessDrive ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId, [parameter(mandatory)][String]$ClientAppName, [parameter(mandatory)][String]$TenantHost) {
+function ProcessDrive ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId, [parameter(mandatory)][String]$TenantHost) {
 
     Write-Host "Processing Drive"
     $driveUrl = $null
@@ -163,7 +163,7 @@ function ProcessDrive ([parameter(mandatory)][System.Object]$Row, [parameter(man
             return
         }
 
-        $permission = New-MgSitePermission -SiteId $siteId -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $ClientAppId -applicationDisplayName $ClientAppName -roles @("FullControl"))
+        $permission = New-MgSitePermission -SiteId $siteId -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("FullControl"))
         if ((HasError -Row $Row -ProcessDriveError $ProcessDriveError -isUser $true)) {
             return
         }
@@ -186,7 +186,7 @@ function ProcessDrive ([parameter(mandatory)][System.Object]$Row, [parameter(man
     }
 }
 
-function ProcessSharePointSite ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId, [parameter(mandatory)][String]$ClientAppName, [parameter(mandatory)][String]$TenantHost) {
+function ProcessSharePointSite ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId, [parameter(mandatory)][String]$TenantHost) {
 
     Write-Host "Processing SharePoint Site"
     try {
@@ -196,7 +196,7 @@ function ProcessSharePointSite ([parameter(mandatory)][System.Object]$Row, [para
             return
         }
 
-        $permission = New-MgSitePermission -SiteId $site.Id -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $ClientAppId -applicationDisplayName $ClientAppName -roles @("FullControl"))
+        $permission = New-MgSitePermission -SiteId $site.Id -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("FullControl"))
         if ((HasError -Row $Row -ProcessDriveError $ProcessDriveError -isUser $false)) {
             return
         }
@@ -231,14 +231,14 @@ function HasError ([parameter(mandatory)][System.Object]$Row, [parameter(mandato
     return $false
 }
 
-function BuildPermission([parameter(mandatory)][String]$applicationId, [parameter(mandatory)][String]$applicationDisplayName, [parameter(mandatory)][string[]]$roles) {
+function BuildPermission([parameter(mandatory)][String]$applicationId, [parameter(mandatory)][string[]]$roles) {
     $params = @{
         roles               = $roles
         grantedToIdentities = @(
             @{
                 application = @{
                     id          = $applicationId
-                    displayName = $applicationDisplayName
+                    displayName = "CloudM-Limited-$($applicationId)"
                 }
             }
         )
@@ -261,21 +261,21 @@ function GetDriveUrl([parameter(mandatory)][String]$webUrl, [int]$strip) {
     return $webUrl
 }
 
-function ProcessRootSite([parameter(mandatory)][String]$ClientAppName) {
+function ProcessRootSite() {
     $site = {
         Get-MgSite -SiteId "Root" -Property $SITE_PROPERTY_REQUEST -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
         CheckErrors -ErrorToProcess $ErrorResult
     } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgSite Root"
   
     $permission = {
-        New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $ClientAppId -applicationDisplayName $ClientAppName -roles @("Read")) -ErrorVariable ErrorResult
+        New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("Read")) -ErrorVariable ErrorResult
         CheckErrors -ErrorToProcess $ErrorResult
     } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "New-MgSitePermission: $($site.Id)"
     Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
     return [Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site
 }
 
-function ProcessMySite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site, [parameter(mandatory)][String]$ClientAppName) {
+function ProcessMySite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site) {
     $siteId = GetHost -id $site.Id -insertUrl "-my"
     $site = { 
         Get-MgSite -SiteId $siteId -Property $SITE_PROPERTY_REQUEST -ErrorVariable ErrorResult
@@ -283,13 +283,13 @@ function ProcessMySite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.
     } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgSite: $($siteId)"
     
     $permission = {
-        New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $ClientAppId -applicationDisplayName %$ClientAppName -roles @("Read")) -ErrorVariable ErrorResult
+        New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("Read")) -ErrorVariable ErrorResult
         CheckErrors -ErrorToProcess $ErrorResult
     } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "New-MgSitePermission: $($site.Id)"
     Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
 }
 
-function ProcessAdminSite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site, [parameter(mandatory)][String]$ClientAppName) {
+function ProcessAdminSite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site) {
     $siteId = GetHost -id $site.Id -insertUrl "-admin"
     $site = { 
         Get-MgSite -SiteId $siteId -Property $SITE_PROPERTY_REQUEST -ErrorVariable ErrorResult
@@ -297,7 +297,7 @@ function ProcessAdminSite([parameter(mandatory)][Microsoft.Graph.PowerShell.Mode
     } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgSite: $($siteId)"
     
     $permission = {
-        New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $ClientAppId -applicationDisplayName $ClientAppName -roles @("FullControl")) -ErrorVariable ErrorResult
+        New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("FullControl")) -ErrorVariable ErrorResult
         CheckErrors -ErrorToProcess $ErrorResult
     } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "New-MgSitePermission: $($site.Id)"
     Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
@@ -374,7 +374,6 @@ function ProcessEmailDriveCsv (
     [parameter(mandatory)][String]$TenantName,
     [parameter(mandatory)][String]$ClientAppId, 
     [parameter(mandatory)][String]$ClientAppCertificate,
-    [parameter(mandatory)][String]$ClientAppName,
     [SecureString]$SecureCertificatePassword, 
     [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {
     try {
@@ -391,9 +390,9 @@ function ProcessEmailDriveCsv (
         ConnectExchangeOnline -AppId $ClientAppId -CertPath $ClientAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantName $TenantName
         $csv = Import-Csv $file
         $initEmailCounter = 0
-        $site = ProcessRootSite -ClientAppName $ClientAppName
+        $site = ProcessRootSite 
         $tenantHost = GetHost -id $site.Id -insertUrl "-my"
-        ProcessMySite -site $site -ClientAppName $ClientAppName
+        ProcessMySite -site $site 
         Write-Host "$($nl)$($nl)--------------------------------Processing EmailDrive.csv-----------------------------------------"
         foreach ($Row in $csv) {
             $Row | Add-Member -NotePropertyName "EmailStatus" -NotePropertyValue $NOT_APPLICABLE -Force
@@ -405,7 +404,7 @@ function ProcessEmailDriveCsv (
             Write-Host "$($nl)$($nl)--------------------------------Processing $($Row.Email) Starting-----------------------------------------"
             switch ($itemType) {
                 Drive {
-                    ProcessDrive -Row $Row -ClientAppId $ClientAppId -ClientAppName $ClientAppName -$tenantHost $tenantHost
+                    ProcessDrive -Row $Row -ClientAppId $ClientAppId  -$tenantHost $tenantHost
                     break
                 }
                 EMail {
@@ -416,7 +415,7 @@ function ProcessEmailDriveCsv (
                 EmailDrive {
                     ProcessEmail -Row $Row -MailGroupAlias $MailGroupAlias -Attempt $initEmailCounter
                     $initEmailCounter++
-                    ProcessDrive -Row $Row -ClientAppId $ClientAppId -ClientAppName $ClientAppName -TenantHost $tenantHost
+                    ProcessDrive -Row $Row -ClientAppId $ClientAppId  -TenantHost $tenantHost
                     break
                 }
                 default {
@@ -444,7 +443,7 @@ function ProcessMicrosoftTeamGroupCsv (
     [parameter(mandatory)][String]$TenantName,
     [parameter(mandatory)][String]$ClientAppId, 
     [parameter(mandatory)][String]$ClientAppCertificate,
-    [parameter(mandatory)][String]$ClientAppName,
+    
     [SecureString]$SecureCertificatePassword, 
     [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {
     try {
@@ -460,9 +459,9 @@ function ProcessMicrosoftTeamGroupCsv (
         $nl = [Environment]::NewLine
         ConnectMsGraph -Environment $Environment
         ConnectExchangeOnline -AppId $ClientAppId -CertPath $ClientAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantName $TenantName
-        $site = ProcessRootSite -ClientAppName $ClientAppName
+        $site = ProcessRootSite 
         $tenantHost = GetHost -id $site.Id -insertUrl ""
-        ProcessAdminSite -site $site -ClientAppName $ClientAppName
+        ProcessAdminSite -site $site 
         $csv = Import-Csv $file
         Write-Host "$($nl)$($nl)--------------------------------Processing MicrosoftTeamGroup.csv-----------------------------------------"
         foreach ($Row in $csv) {
@@ -475,7 +474,7 @@ function ProcessMicrosoftTeamGroupCsv (
             $microsoftTeamGroupItemType = [MicrosoftTeamGroupItemType]$Row.MicrosoftTeamGroupItemType
             switch ($microsoftTeamGroupItemType) {
                 Site {
-                    ProcessMicrosoftTeamGroupSite -Row $Row -ClientAppName $ClientAppName -ClientAppId $ClientAppId -TenantHost $tenantHost
+                    ProcessMicrosoftTeamGroupSite -Row $Row  -ClientAppId $ClientAppId -TenantHost $tenantHost
                     break
                 }
                 EMail {
@@ -486,7 +485,7 @@ function ProcessMicrosoftTeamGroupCsv (
                 EmailSite {
                     ProcessEmail -Row $Row -MailGroupAlias $MailGroupAlias -Attempt $initEmailCounter
                     $initEmailCounter++
-                    ProcessMicrosoftTeamGroupSite -Row $Row -ClientAppName $ClientAppName -ClientAppId $ClientAppId -TenantHost $tenantHost
+                    ProcessMicrosoftTeamGroupSite -Row $Row  -ClientAppId $ClientAppId -TenantHost $tenantHost
                     break
                 }
                 default {
@@ -510,7 +509,7 @@ function ProcessMicrosoftTeamGroupCsv (
 function ProcessSharePointSiteCsv (
     [parameter(mandatory)][String]$WorkFolder,
     [parameter(mandatory)][String]$ClientAppId,
-    [parameter(mandatory)][String]$ClientAppName,
+    
     [parameter(mandatory)][String]$Environment, 
     [SecureString]$SecureCertificatePassword, 
     [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {
@@ -523,9 +522,9 @@ function ProcessSharePointSiteCsv (
         }  
         $nl = [Environment]::NewLine
         ConnectMsGraph -Environment $Environment
-        $site = ProcessRootSite -ClientAppName $ClientAppName
+        $site = ProcessRootSite 
         $tenantHost = GetHost -id $site.Id -insertUrl ""
-        ProcessAdminSite -site $site -ClientAppName $ClientAppName
+        ProcessAdminSite -site $site 
         $csv = Import-Csv $file
         Write-Host "$($nl)$($nl)--------------------------------Processing SharePointSites.csv-----------------------------------------"
         foreach ($Row in $csv) {
@@ -533,7 +532,7 @@ function ProcessSharePointSiteCsv (
             $Row | Add-Member -NotePropertyName "SiteStatus" -NotePropertyValue $NOT_APPLICABLE -Force
             $Row | Add-Member -NotePropertyName "SiteErrorMessage" -NotePropertyValue $NOT_APPLICABLE -Force
             Write-Host "$($nl)$($nl)--------------------------------Processing $($Row.SiteUrl) Starting-----------------------------------------"
-            ProcessSharePointSite -Row $Row -ClientAppId $ClientAppId -ClientAppName $ClientAppName -TenantHost $tenantHost
+            ProcessSharePointSite -Row $Row -ClientAppId $ClientAppId  -TenantHost $tenantHost
             Write-Host "--------------------------------Processing $($Row.SiteUrl) Completed-----------------------------------------"
         }
         $csv | Export-Csv $file -NoType
@@ -553,13 +552,13 @@ function ProcessCsv(
     [parameter(mandatory)][String]$MailGroupAlias, 
     [parameter(mandatory)][String]$ClientAppId, 
     [parameter(mandatory)][String]$ClientAppCertificate,
-    [parameter(mandatory)][String]$ClientAppName,
+    
     [parameter(mandatory)][String]$Environment, 
     [SecureString]$SecureCertificatePassword) {
     try {
-        ProcessEmailDriveCsv -WorkFolder $WorkFolder -SecureCertificatePassword $SecureCertificatePassword -MailGroupAlias $MailGroupAlias -ClientAppId $ClientAppId -ClientAppCertificate $ClientAppCertificate -Environment $Environment -ClientAppName $ClientAppName
-        ProcessMicrosoftTeamGroupCsv -WorkFolder $WorkFolder -SecureCertificatePassword $SecureCertificatePassword -MailGroupAlias $MailGroupAlias -ClientAppId $ClientAppId -ClientAppCertificate $ClientAppCertificate -Environment $Environment -ClientAppName $ClientAppName
-        ProcessSharePointSiteCsv -WorkFolder $WorkFolder -SecureCertificatePassword $SecureCertificatePassword -ClientAppId $ClientAppId -Environment $Environment -ClientAppName $ClientAppName
+        ProcessEmailDriveCsv -WorkFolder $WorkFolder -SecureCertificatePassword $SecureCertificatePassword -MailGroupAlias $MailGroupAlias -ClientAppId $ClientAppId -ClientAppCertificate $ClientAppCertificate -Environment $Environment 
+        ProcessMicrosoftTeamGroupCsv -WorkFolder $WorkFolder -SecureCertificatePassword $SecureCertificatePassword -MailGroupAlias $MailGroupAlias -ClientAppId $ClientAppId -ClientAppCertificate $ClientAppCertificate -Environment $Environment 
+        ProcessSharePointSiteCsv -WorkFolder $WorkFolder -SecureCertificatePassword $SecureCertificatePassword -ClientAppId $ClientAppId -Environment $Environment 
     }
     finally {
         Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null

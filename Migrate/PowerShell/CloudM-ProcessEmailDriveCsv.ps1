@@ -64,7 +64,7 @@ function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
 }
 
 function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(mandatory)][String]$ClientAppId) {
-    $destinationPath = Join-Path -Path $workFolder -ChildPath "$($ClientAppId)"
+    $destinationPath = Join-Path -Path $workFolder -ChildPath "CloudM-Limited-App-$($ClientAppId)"
     New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
     $file = Join-Path -Path $workFolder -ChildPath "EmailDrive.csv" 
     if ((Test-Path -Path $file -PathType Leaf)) {
@@ -94,7 +94,6 @@ $TenantName = "test365.cloudm.io"
 $ClientAppId = "f31a2a1c-cceb-4d6f-af44-a1dc4f2c20ec"
 $ClientAppCertificate = "C:\Projects\cloudm-public\Migrate\PowerShell\CloudM-LimitedTestAppAshley - test365.cloudm.io\CloudM-LimitedTestAppAshley-test365.cloudm.io.pfx"
 $Environment = "Global"
-$ClientAppName = "Test"
 ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
 
 
@@ -105,7 +104,6 @@ $ProcessEmailDriveCsv = @{
     ClientAppId               = $ClientAppId
     ClientAppCertificate      = $ClientAppCertificate
     Environment               = $Environment
-    ClientAppName             = $ClientAppName
     TenantName                = $TenantName
 }
 
