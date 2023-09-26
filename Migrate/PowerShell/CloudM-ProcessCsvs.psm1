@@ -261,46 +261,13 @@ function GetDriveUrl([parameter(mandatory)][String]$webUrl, [int]$strip) {
     return $webUrl
 }
 
-function ProcessRootSite() {
-    $site = {
-        Get-MgSite -SiteId "Root" -Property $SITE_PROPERTY_REQUEST -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
+function GetRootSiteId() {
+    $siteId = {
+        (Get-MgSite -SiteId "Root" -Property $SITE_PROPERTY_REQUEST -ErrorAction SilentlyContinue -ErrorVariable ErrorResult).Id
         CheckErrors -ErrorToProcess $ErrorResult
     } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgSite Root"
   
-    $permission = {
-        New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("Read")) -ErrorVariable ErrorResult
-        CheckErrors -ErrorToProcess $ErrorResult
-    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "New-MgSitePermission: $($site.Id)"
-    Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
-    return [Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site
-}
-
-function ProcessMySite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site) {
-    $siteId = GetHost -id $site.Id -insertUrl "-my"
-    $site = { 
-        Get-MgSite -SiteId $siteId -Property $SITE_PROPERTY_REQUEST -ErrorVariable ErrorResult
-        CheckErrors -ErrorToProcess $ErrorResult
-    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgSite: $($siteId)"
-    
-    $permission = {
-        New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("Read")) -ErrorVariable ErrorResult
-        CheckErrors -ErrorToProcess $ErrorResult
-    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "New-MgSitePermission: $($site.Id)"
-    Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
-}
-
-function ProcessAdminSite([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMicrosoftGraphSite]$site) {
-    $siteId = GetHost -id $site.Id -insertUrl "-admin"
-    $site = { 
-        Get-MgSite -SiteId $siteId -Property $SITE_PROPERTY_REQUEST -ErrorVariable ErrorResult
-        CheckErrors -ErrorToProcess $ErrorResult
-    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgSite: $($siteId)"
-    
-    $permission = {
-        New-MgSitePermission -SiteId $site.Id -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("FullControl")) -ErrorVariable ErrorResult
-        CheckErrors -ErrorToProcess $ErrorResult
-    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "New-MgSitePermission: $($site.Id)"
-    Write-Host (BuildPermissionMessage -permission $permission -siteId $site.Id -siteUrl $site.WebUrl) -ForegroundColor Green
+    return $siteId
 }
 
 function GetHost([parameter(mandatory)][String]$id, [string]$insertUrl) {
@@ -390,9 +357,8 @@ function ProcessEmailDriveCsv (
         ConnectExchangeOnline -AppId $ClientAppId -CertPath $ClientAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantName $TenantName
         $csv = Import-Csv $file
         $initEmailCounter = 0
-        $site = ProcessRootSite 
-        $tenantHost = GetHost -id $site.Id -insertUrl "-my"
-        ProcessMySite -site $site 
+        $siteId = GetRootSiteId 
+        $tenantHost = GetHost -id $siteId -insertUrl "-my"
         Write-Host "$($nl)$($nl)--------------------------------Processing EmailDrive.csv-----------------------------------------"
         foreach ($Row in $csv) {
             $Row | Add-Member -NotePropertyName "EmailStatus" -NotePropertyValue $NOT_APPLICABLE -Force
@@ -459,9 +425,8 @@ function ProcessMicrosoftTeamGroupCsv (
         $nl = [Environment]::NewLine
         ConnectMsGraph -Environment $Environment
         ConnectExchangeOnline -AppId $ClientAppId -CertPath $ClientAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantName $TenantName
-        $site = ProcessRootSite 
-        $tenantHost = GetHost -id $site.Id -insertUrl ""
-        ProcessAdminSite -site $site 
+        $siteId = GetRootSiteId 
+        $tenantHost = GetHost -id $siteId -insertUrl ""
         $csv = Import-Csv $file
         Write-Host "$($nl)$($nl)--------------------------------Processing MicrosoftTeamGroup.csv-----------------------------------------"
         foreach ($Row in $csv) {
@@ -522,9 +487,8 @@ function ProcessSharePointSiteCsv (
         }  
         $nl = [Environment]::NewLine
         ConnectMsGraph -Environment $Environment
-        $site = ProcessRootSite 
-        $tenantHost = GetHost -id $site.Id -insertUrl ""
-        ProcessAdminSite -site $site 
+        $siteId = GetRootSiteId 
+        $tenantHost = GetHost -id $siteId -insertUrl ""
         $csv = Import-Csv $file
         Write-Host "$($nl)$($nl)--------------------------------Processing SharePointSites.csv-----------------------------------------"
         foreach ($Row in $csv) {
