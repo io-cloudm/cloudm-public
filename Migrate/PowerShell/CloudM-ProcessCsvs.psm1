@@ -370,7 +370,7 @@ function ProcessEmailDriveCsv (
             Write-Host "$($nl)$($nl)--------------------------------Processing $($Row.Email) Starting-----------------------------------------"
             switch ($itemType) {
                 Drive {
-                    ProcessDrive -Row $Row -ClientAppId $ClientAppId  -$tenantHost $tenantHost
+                    ProcessDrive -Row $Row -ClientAppId $ClientAppId  -TenantHost $tenantHost
                     break
                 }
                 EMail {
