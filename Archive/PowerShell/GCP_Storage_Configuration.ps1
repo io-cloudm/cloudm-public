@@ -17,7 +17,7 @@
   It must start with a lower case letter, followed by one or more lower case alphanumerical characters that can be separated by hyphens. It cannot have a trailing hyphen.
 
   .PARAMETER Region
-  Specifies the Region required for the CloudM Archive. Region must be one of 'us-central1', 'us-west1', 'us-west2', 'us-west3', 'us-west4', 'us-east1', 'us-east4', 'europe-west1', 'europe-west3', 'europe-west4', 'europe-west6', 'europe-north1'.
+  Specifies the Region required for the CloudM Archive. Region must be one of 'us-central1', 'us-west1', 'us-west2', 'us-west3', 'us-west4', 'us-east1', 'us-east4', 'us-east5', 'us-south1', 'northamerica-northeast1', 'northamerica-northeast2', 'europe-west1', 'europe-west2', 'europe-west3', 'europe-west4', 'europe-west6', 'europe-west8', 'europe-west9', 'europe-west12', 'europe-southwest1', 'europe-central2', 'europe-north1'.
 
   .PARAMETER BucketName
   Specifies the bucket to create in Google Cloud Storage. Bucket name must be adhere to the naming conventions outlined at 'https://cloud.google.com/storage/docs/naming-buckets'.
@@ -71,9 +71,9 @@ param(
     [String]
     $ServiceAccountId,
 
-    [Parameter(Mandatory=$true, Position=2, ValueFromPipeline=$false, HelpMessage="Region must be one of 'us-central1', 'us-west1', 'us-west2', 'us-west3', 'us-west4', 'us-east1', 'us-east4', 'europe-west1', 'europe-west3', 'europe-west4', 'europe-west6', 'europe-north1'")]
+    [Parameter(Mandatory=$true, Position=2, ValueFromPipeline=$false, HelpMessage="Region must be one of 'us-central1', 'us-west1', 'us-west2', 'us-west3', 'us-west4', 'us-east1', 'us-east4', 'us-east5', 'us-south1', 'northamerica-northeast1', 'northamerica-northeast2', 'europe-west1', 'europe-west2', 'europe-west3', 'europe-west4', 'europe-west6', 'europe-west8', 'europe-west9', 'europe-west12', 'europe-southwest1', 'europe-central2', 'europe-north1'")]
     [Alias("R")]
-    [ValidateSet("us-central1", "us-west1", "us-west2", "us-west3", "us-west4", "us-east1", "us-east4", "europe-west1", "europe-west3", "europe-west4", "europe-west6", "europe-north1")]
+    [ValidateSet("us-central1", "us-west1", "us-west2", "us-west3", "us-west4", "us-east1", "us-east4", "us-east5", "us-south1", "northamerica-northeast1", "northamerica-northeast2", "europe-west1", "europe-west2", "europe-west3", "europe-west4", "europe-west6", "europe-west8", "europe-west9", "europe-west12", "europe-southwest1", "europe-central2", "europe-north1")]
     [String]
     $Region,
 
