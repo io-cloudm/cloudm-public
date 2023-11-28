@@ -36,6 +36,19 @@ function ImportModules([parameter(mandatory)][String]$moduleName,
     Import-Module $moduleName -Scope Global -RequiredVersion $requiredVersion -ErrorAction SilentlyContinue
 } 
 
+function CreateConnection([parameter(mandatory)][String]$token, [parameter(mandatory)][int]$azureEnvironment) {
+    Write-Progress "Connecting to MgGraph using an Access token"
+    $ae = switch ( $azureEnvironment ) {
+        0 { 'Global' }
+        1 { 'Global' }
+        2 { 'China' }
+        3 { 'USGov' }
+        4 { 'USGovDoD' }
+    }
+    $secureToken = ConvertTo-SecureString $token -AsPlainText -Force
+    Connect-MgGraph -Environment $ae -AccessToken $secureToken -NoWelcome -ErrorAction Stop
+}
+
 function CreateInteractiveConnection([parameter(mandatory)][int]$azureEnvironment) {
     Write-Host "Connecting to MgGraph using an Interactive login"
     $ae = switch ( $azureEnvironment ) {
@@ -56,6 +69,18 @@ function CreateInteractiveConnection([parameter(mandatory)][int]$azureEnvironmen
         "RoleManagement.ReadWrite.Directory"
     )
     Connect-MgGraph -Environment $ae -Scope $neededScopes -NoWelcome -ErrorAction Stop
+}
+
+function CreateConnection([parameter(mandatory)][string]$token, [parameter(mandatory)][int]$azureEnvironment) {
+    Write-Progress "Connecting to MgGraph using an Access token"
+    $ae = switch ( $azureEnvironment ) {
+        0 { 'Global' }
+        1 { 'China' }
+        2 { 'USGov' }
+        3 { 'USGovDoD' }
+    }
+    $secureToken = ConvertTo-SecureString $token -AsPlainText -Force
+    Connect-MgGraph -Environment $ae -AccessToken $secureToken -ErrorAction Stop | Out-Null
 }
 
 function CreateApplication([parameter(mandatory)][String]$appName, [parameter(mandatory)][System.Collections.Generic.List[Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess]]$requiredResourceAccess) {
@@ -95,8 +120,15 @@ function GetSharepointApiPermissions([bool]$limitedScope) {
 function GetSharepointPermissionsRoles([bool]$limitedScope) {
     [string[]]$roles = @()
     switch ($limitedScope) {
+        #Sites.Selected
         $true { $roles += "20d37865-089c-4dee-8c41-6967602d4ac8" }
-        $false { $roles += "678536fe-1083-478a-9c59-b99265e6b0d3", "741f803b-c850-494e-b5df-cde7c675a1ca" }
+        $false {
+            $roles += 
+            #Sites.FullControl.All
+            "678536fe-1083-478a-9c59-b99265e6b0d3", 
+            #User.ReadWrite.All
+            "741f803b-c850-494e-b5df-cde7c675a1ca" 
+        }
     }
     return $roles
 }
@@ -106,29 +138,42 @@ function GetExchangeApiPermissions() {
     [string[]]$roles = GetExchangePermissionsRoles
     return GenerateRequiredResourceAccess -resourceAppId $exchangeAppId -roles $roles
 }
-
 function GetExchangePermissionsRoles() {
-    [string[]]$roles = @("dc890d15-9560-4a4c-9b7f-a736ec74ec40", "dc50a0fb-09a3-484d-be87-e023b12c6440")
+    [string[]]$roles = @(
+        #full_access_as_app
+        "dc890d15-9560-4a4c-9b7f-a736ec74ec40", 
+        #Exchange.ManageAsApp
+        "dc50a0fb-09a3-484d-be87-e023b12c6440")
     return $roles
 }
 
 function GetMicrosoftGraphPermissionsRoles([bool]$limitedScope) {
     [string[]]$roles = @(
-        "75359482-378d-4052-8f01-80520e7db3cd",
-        "5b567255-7703-4780-807c-7be8301ae99b",
-        "62a82d76-70ea-41e2-9197-370581804d09",
-        "e2a3a72e-5f79-4c64-b1b1-878b674786c9",
-        "3aeca27b-ee3a-4c2b-8ded-80376e2134a4",
-        "df021288-bdef-4463-88db-98f22de89214",
-        "913b9306-0ce1-42b8-9137-6a7df690a760",
-        "35930dcf-aceb-4bd1-b99a-8ffed403c974",        
-        "7ab1d382-f21e-4acd-a863-ba3e13f7da61",
-        "294ce7c9-31ba-490a-ad7d-97a7d075e4ed",
+        #Teamwork.Migrate.All
         "dfb0dd15-61de-45b2-be36-d6a69fba3c79",
+        #Tasks.ReadWrite.All
         "44e666d1-d276-445b-a5fc-8815eeb81d55"
+        #User.Read.All
+        "df021288-bdef-4463-88db-98f22de89214",
+        #Place.Read.All
+        "913b9306-0ce1-42b8-9137-6a7df690a760",
+        #Group.ReadWrite.All
+        "62a82d76-70ea-41e2-9197-370581804d09",
+        #Files.Read.All
+        "01d4889c-1287-42c6-ac1f-5d1e02578ef6",
+        #Directory.Read.All
+        "7ab1d382-f21e-4acd-a863-ba3e13f7da61",
+        #Chat.ReadWrite.All
+        "294ce7c9-31ba-490a-ad7d-97a7d075e4ed"
+        #ChannelMember.ReadWrite.All,
+        "35930dcf-aceb-4bd1-b99a-8ffed403c974"
+        #Mail.ReadBasic
+        "6be147d2-ea4f-4b5a-a3fa-3eab6f3c140a"
     )
     switch ($limitedScope) {
+        #Sites.Selected
         $true { $roles += "883ea226-0bf2-4a8f-9f9d-92c9162a727d" }
+        #Sites.ReadWrite.All
         $false { $roles += "9492366f-7969-46a4-8d15-ed1a20078fff" }
     }
     return $roles
@@ -168,18 +213,32 @@ function GrantAppRoleAssignmentToServicePrincipal([parameter(mandatory)][String]
     }
 }
 
-function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$azureEnvironment, [System.Management.Automation.SwitchParameter]$limitedScope, [String]$certificatePassword) {
+function CreateAppRegistrationInternal ([parameter(mandatory)][String]$token, [parameter(mandatory)][String]$certificateFolder, [parameter(mandatory)][String]$azureEnvironment, [parameter(mandatory)][String]$certificatePassword, [parameter(mandatory)][String]$certificateName, $appName) {
+    
+    if (!$appName) {
+        $appNameDefault = "CloudM Migrate"
+    } 
+    CreateAppRegistration -workFolder $certificateFolder -azureEnvironment $azureEnvironment -certificatePassword $certificatePassword -certificateName $certificateName -token $token -appName $appNameDefault
+}
+
+
+function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$azureEnvironment, [System.Management.Automation.SwitchParameter]$limitedScope, [String]$certificatePassword, [System.Management.Automation.SwitchParameter]$userOutput, [parameter(mandatory)][String]$appName, [String]$certificateName, [String]$token) {
     Write-Progress ("Running as " + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
     try {
         Set-Location -Path $workFolder
+        $internal = $token;
         Write-Host "Import Modules" -ForegroundColor Green
-        Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-Retry"
-        Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-Certificate"
-        Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-Common"
-        Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-ProcessCsvs"
+        Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-Certificate" -internal $internal
+        Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-Common" -internal $internal
+        if ($limitedScope) {
+            Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-Retry" -internal $internal
+            Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-ProcessCsvs" -internal $internal
+        }
         CheckDirectory -path $workFolder
-        $appName = CleanAppName -value $appName
-        $appName = "CloudM-$($appName)"
+        if (!$internal) {
+            $appName = CleanAppName -value $appName
+            $appName = "CloudM-$($appName)"
+        }
 
         $secureCertificatePassword = GetSecurePassword -password $certificatePassword
 
@@ -197,14 +256,24 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
             ImportModules -moduleName Microsoft.Graph.Teams -requiredVersion 2.4.0
             ImportModules -moduleName ExchangeOnlineManagement -requiredVersion 3.2.0
         }
-        CreateInteractiveConnection -azureEnvironment $azureEnvironment
+        if (!$internal) {
+            CreateInteractiveConnection -azureEnvironment $azureEnvironment
+        }
+        else {
+            CreateConnection -token $token -azureEnvironment $azureEnvironment
+        }
            
         Write-Host "Connected" -ForegroundColor Green
         $requiredResourceAccess = GenerateApplicationApiPermissions -limitedScope $limitedScope
         # Create Application
         $app = CreateApplication $appName -requiredResourceAccess $requiredResourceAccess
         Write-Host "Registered app $($appName) - ($($app.AppId))"  -ForegroundColor Green
-        $certName = $appName + "-" + $app.PublisherDomain
+        if (!$certName) {
+            $certName = $appName + "-" + $app.PublisherDomain
+        }
+        else {
+            $certName = $certificateName
+        }
         # Create certificate
         # Generate dates
         CreateUpdateCertificate -appId $app.AppId -workFolder $workFolder -certName $certName -secureCertificatePassword $secureCertificatePassword -certStartDate $certStartDate -certEndDate $certEndDate | Out-Null
@@ -245,6 +314,9 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         Write-Progress "Applying Application Roles" -Completed
         #--------------------------- END GRANT ADMIN CONSENT -------------------------
         $policy = $null
+        if (!$userOutput) {
+            return $app.AppId + "|" + $certPath;
+        }
         
         if ($limitedScope) {
             $mailGroupAlias = $appName 
@@ -275,7 +347,10 @@ function MoveFiles([parameter(mandatory)][String]$sourceFolder, [parameter(manda
     }
 } 
 
-function Import-CloudMModule ([String]$workFolder, [String]$moduleName) {
+function Import-CloudMModule ([String]$workFolder, [String]$moduleName, $internal) {
+    if ($internal) {
+        return
+    }
     Write-Host "Importing CloudM Module: $($moduleName)"
     $path = Join-Path -Path $workFolder -ChildPath "$($moduleName).psm1" 
     if (!(Test-Path -Path $path -PathType Leaf)) {
@@ -362,5 +437,5 @@ function CreateAzureAppRegistration() {
     }
 }
 
-#CreateAzureAppRegistration
-CreateAppRegistration -workFolder "C:\Working" -appName "LimitedTestApp" -azureEnvironment "0" -limitedScope -certificatePassword ""
+CreateAzureAppRegistration
+

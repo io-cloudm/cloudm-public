@@ -126,7 +126,7 @@ function CheckDirectory([parameter(mandatory)][String]$path) {
     }
     try {
         Write-Progress "Checking if new file can be created in directory"
-        New-Item -Path $path -Name "permissioncheck" -ItemType "file"
+        New-Item -Path $path -Name "permissioncheck" -ItemType "file" | Out-Null
     }
     catch {
         throw "User does not have access to directory " + $path
@@ -134,7 +134,7 @@ function CheckDirectory([parameter(mandatory)][String]$path) {
     finally {
         try {
             Write-Progress "Removing permissioncheck file"
-            Remove-Item -Path ($path + "\permissioncheck") -Force
+            Remove-Item -Path ($path + "\permissioncheck") -Force | Out-Null
         }
         catch {
             Write-Progress "Could not remove permissioncheck file. " $_.Exception.Message
