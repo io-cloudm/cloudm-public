@@ -17,7 +17,7 @@
   It must start with a lower case letter, followed by one or more lower case alphanumerical characters that can be separated by hyphens. It cannot have a trailing hyphen.
 
   .PARAMETER Region
-  Specifies the Region required for the CloudM Archive. Region must be one of 'us-central1', 'us-west1', 'us-west2', 'us-west3', 'us-west4', 'us-east1', 'us-east4', 'europe-west1', 'europe-west3', 'europe-west4', 'europe-west6', 'europe-north1'.
+  Specifies the Region required for the CloudM Archive. Region must be one of 'us-central1', 'us-west1', 'us-west2', 'us-west3', 'us-west4', 'us-east1', 'us-east4', 'us-east5', 'us-south1', 'northamerica-northeast1', 'northamerica-northeast2', 'europe-west1', 'europe-west2', 'europe-west3', 'europe-west4', 'europe-west6', 'europe-west8', 'europe-west9', 'europe-west12', 'europe-southwest1', 'europe-central2', 'europe-north1'.
 
   .PARAMETER BucketName
   Specifies the bucket to create in Google Cloud Storage. Bucket name must be adhere to the naming conventions outlined at 'https://cloud.google.com/storage/docs/naming-buckets'.
@@ -26,14 +26,14 @@
   Specifies the Cryptographic Key to create in Google Cloud Storage if choosing to use your own key. OPTIONAL.
 
   .PARAMETER StorageClass
-  Specifies the Bucket Storage Class to use. Storage Class must be one of 'STANDARD', 'NEARLINE', 'COLDLINE', 'ARCHIVE'. OPTIONAL.
+  Specifies the Bucket Storage Class to use. Storage Class must be one of 'STANDARD', 'NEARLINE', 'COLDLINE', 'ARCHIVE', 'AUTOCLASS'. OPTIONAL.
 
   .PARAMETER ServiceAccountKeyType
   Specifies the Service Account Key Type to create. Must be one of 'json', 'p12'. OPTIONAL.
   
   .PARAMETER OutputPath
   Specifies a path to output the script log and service account p12 key to. If not provided UserProfileHome\GCPConfig is used as a default
-  
+        
   .INPUTS
   None. You cannot pipe objects to GCP_Storage_Configuration.ps1.
 
@@ -71,9 +71,9 @@ param(
     [String]
     $ServiceAccountId,
 
-    [Parameter(Mandatory=$true, Position=2, ValueFromPipeline=$false, HelpMessage="Region must be one of 'us-central1', 'us-west1', 'us-west2', 'us-west3', 'us-west4', 'us-east1', 'us-east4', 'europe-west1', 'europe-west3', 'europe-west4', 'europe-west6', 'europe-north1'")]
+    [Parameter(Mandatory=$true, Position=2, ValueFromPipeline=$false, HelpMessage="Region must be one of 'us-central1', 'us-west1', 'us-west2', 'us-west3', 'us-west4', 'us-east1', 'us-east4', 'us-east5', 'us-south1', 'northamerica-northeast1', 'northamerica-northeast2', 'europe-west1', 'europe-west2', 'europe-west3', 'europe-west4', 'europe-west6', 'europe-west8', 'europe-west9', 'europe-west12', 'europe-southwest1', 'europe-central2', 'europe-north1'")]
     [Alias("R")]
-    [ValidateSet("us-central1", "us-west1", "us-west2", "us-west3", "us-west4", "us-east1", "us-east4", "europe-west1", "europe-west3", "europe-west4", "europe-west6", "europe-north1")]
+    [ValidateSet("us-central1", "us-west1", "us-west2", "us-west3", "us-west4", "us-east1", "us-east4", "us-east5", "us-south1", "northamerica-northeast1", "northamerica-northeast2", "europe-west1", "europe-west2", "europe-west3", "europe-west4", "europe-west6", "europe-west8", "europe-west9", "europe-west12", "europe-southwest1", "europe-central2", "europe-north1")]
     [String]
     $Region,
 
@@ -91,9 +91,9 @@ param(
     [String]
     $KeyName,
 
-    [Parameter(Mandatory=$false, Position=5, ValueFromPipeline=$false, HelpMessage="Storage Class must be one of 'STANDARD', 'NEARLINE', 'COLDLINE', 'ARCHIVE'")]
+    [Parameter(Mandatory=$false, Position=5, ValueFromPipeline=$false, HelpMessage="Storage Class must be one of 'STANDARD', 'NEARLINE', 'COLDLINE', 'ARCHIVE', 'AUTOCLASS'")]
     [Alias("SC")]
-    [ValidateSet("STANDARD", "NEARLINE", "COLDLINE", "ARCHIVE")]
+    [ValidateSet("STANDARD", "NEARLINE", "COLDLINE", "ARCHIVE", "AUTOCLASS")]
     [String]
     $StorageClass = "STANDARD",
 
@@ -621,7 +621,13 @@ Function Configure-Bucket ([string]$LogPath, [string]$ProjectId, [string]$Bucket
 
         Try {
 
-            gsutil mb -p $($ProjectId) -l $($Region) -c $StorageClass -b on $BucketToCreate
+            if($StorageClass -eq "AUTOCLASS") {
+
+				gsutil mb --autoclass -p $($ProjectId) -l $($Region) -b on $BucketToCreate
+			}
+			else {
+				gsutil mb -p $($ProjectId) -l $($Region) -c $StorageClass -b on $BucketToCreate
+			}
 
             if($LastExitCode -ne 0) { Throw "Failed to Create Bucket: '$BucketToCreate' in Project: '$ProjectId'" }
 
