@@ -36,13 +36,13 @@ function ImportModules([parameter(mandatory)][String]$moduleName,
 
 function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
     Set-Location -Path $workFolder
-    ImportModules -moduleName Microsoft.Graph.Identity.DirectoryManagement -requiredVersion 2.4.0
-    ImportModules -moduleName Microsoft.Graph.Applications -requiredVersion 2.4.0
+    ImportModules -moduleName Microsoft.Graph.Identity.DirectoryManagement -requiredVersion 2.10.0
+    ImportModules -moduleName Microsoft.Graph.Applications -requiredVersion 2.10.0
     if ($limitedScope) {
-        ImportModules -moduleName Microsoft.Graph.Files -requiredVersion 2.4.0
-        ImportModules -moduleName Microsoft.Graph.Sites -requiredVersion 2.4.0
-        ImportModules -moduleName Microsoft.Graph.Groups -requiredVersion 2.4.0
-        ImportModules -moduleName Microsoft.Graph.Teams -requiredVersion 2.4.0
+        ImportModules -moduleName Microsoft.Graph.Files -requiredVersion 2.10.0
+        ImportModules -moduleName Microsoft.Graph.Sites -requiredVersion 2.10.0
+        ImportModules -moduleName Microsoft.Graph.Groups -requiredVersion 2.10.0
+        ImportModules -moduleName Microsoft.Graph.Teams -requiredVersion 2.10.0
         ImportModules -moduleName ExchangeOnlineManagement -requiredVersion 3.2.0
     }
     $retryPms1 = Join-Path -Path $WorkFolder -ChildPath "CloudM-Retry.psm1" 

@@ -93,8 +93,8 @@ function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Ro
         $successSiteUrls = @("$($site.WebUrl) - ($($site.Id))")
     
         if ($isMicrosoftTeam) {
-            Write-Host "Checking for Private Channels"
-            $teamChannels = Get-MgTeamChannel -TeamId $group.Id -Filter "MembershipType eq 'private'" -Property "Id" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
+            Write-Host "Checking for Private/Shared Channels"
+            $teamChannels = Get-MgTeamChannel -TeamId $group.Id -Filter "MembershipType ne 'standard'" -Property "Id, MembershipType" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
             if ((HasError -Row $Row -ProcessDriveError $ErrorResult -isUser $false)) {
                 return
             }
@@ -102,24 +102,28 @@ function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Ro
             foreach ($channel in $teamChannels) {
                 $webUrl = Get-MgTeamChannelFileFolder -TeamId $group.Id -ChannelId $channel.Id -Property $SITE_PROPERTY_REQUEST -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
                 if ($ErrorResult.Count -ge 1) {
-                    Write-Host "Private Channel: $($channel.DisplayName) failed with $($ErrorResult[0].Exception)" -ForegroundColor Red
-                    $privateChannelErrors += "Private Channel: $($channel.DisplayName) failed with: $($ErrorResult[0].Exception)"
+                    Write-Host "Private/Shared Channel: $($channel.DisplayName) failed with $($ErrorResult[0].Exception)" -ForegroundColor Red
+                    $privateChannelErrors += "Private/Shared Channel: $($channel.DisplayName) failed with: $($ErrorResult[0].Exception)"
                     $ErrorResult.Clear()
                     continue
                 }
-                $webUrl = GetDriveUrl -webUrl $webUrl.WebUrl -strip 2
+                $strip = 1
+                if($channel.MembershipType -eq "private"){
+                    $strip = 2
+                }
+                $webUrl = GetDriveUrl -webUrl $webUrl.WebUrl -strip $strip
                 $sitePath = $webUrl.Replace("https://$($TenantHost)", "")
                 $siteId = (Invoke-MgGraphRequest -Uri "v1.0/sites/$($TenantHost):$($sitePath)" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult).Id
                 if ($ErrorResult.Count -ge 1) {
-                    Write-Host "Private Channel: $($channel.DisplayName) failed with $($ErrorResult[0].Exception)" -ForegroundColor Red
-                    $privateChannelErrors += "Private Channel: $($channel.DisplayName) failed with: $($ErrorResult[0].Exception)"
+                    Write-Host "Private/Shared Channel: $($channel.DisplayName) failed with $($ErrorResult[0].Exception)" -ForegroundColor Red
+                    $privateChannelErrors += "Private/Shared Channel: $($channel.DisplayName) failed with: $($ErrorResult[0].Exception)"
                     $ErrorResult.Clear()
                     continue
                 }
                 $permission = New-MgSitePermission -SiteId $siteId -ErrorAction SilentlyContinue -ErrorVariable ErrorResult -BodyParameter (BuildPermission -applicationId $ClientAppId  -roles @("FullControl"))
                 if ($ErrorResult.Count -ge 1) {
                     Write-Host "Channel: $($channel.DisplayName) failed with $($ErrorResult[0].Exception)" -ForegroundColor Red
-                    $privateChannelErrors += "Private Channel: $($channel.DisplayName) failed with: $($ErrorResult[0].Exception)"
+                    $privateChannelErrors += "Private/Shared Channel: $($channel.DisplayName) failed with: $($ErrorResult[0].Exception)"
                     $ErrorResult.Clear()
                     continue
                 }
@@ -287,7 +291,7 @@ function CreateUpdateApplicationAccessPolicy([parameter(mandatory)][String]$AppI
     $appPolicies = { 
         Get-ApplicationAccessPolicy -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
         CheckErrors -ErrorToProcess $ErrorResult 
-    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get Application Access Policy" -OnFinalExceptionContinue
+    } | RetryCommand -TimeoutInSeconds 5 -RetryCount 10 -Context "Get Application Access Policy" -OnFinalExceptionContinue
   
     if ($appPolicies) {
         foreach ($policie in $appPolicies) {

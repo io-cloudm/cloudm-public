@@ -68,7 +68,7 @@ function CreateInteractiveConnection([parameter(mandatory)][int]$azureEnvironmen
         "AppRoleAssignment.ReadWrite.All"
         "RoleManagement.ReadWrite.Directory"
     )
-    Connect-MgGraph -Environment $ae -Scope $neededScopes -NoWelcome -ErrorAction Stop
+    Connect-MgGraph -Environment $ae -Scope $neededScopes -NoWelcome -ErrorAction Stop | Out-Null
 }
 
 function CreateConnection([parameter(mandatory)][string]$token, [parameter(mandatory)][int]$azureEnvironment) {
@@ -80,7 +80,35 @@ function CreateConnection([parameter(mandatory)][string]$token, [parameter(manda
         3 { 'USGovDoD' }
     }
     $secureToken = ConvertTo-SecureString $token -AsPlainText -Force
-    Connect-MgGraph -Environment $ae -AccessToken $secureToken -ErrorAction Stop | Out-Null
+    Connect-MgGraph -Environment $ae -AccessToken $secureToken -NoWelcome -ErrorAction Stop | Out-Null
+}
+
+function RemoveRequiredResourceAccess([parameter(mandatory)][string]$applicationId) {
+    $appRequiredResourceAccess = @()
+    $appRoleIds = @()
+    $requiredResourceAccess = (Invoke-MgGraphRequest -Uri "v1.0/applications(appId='$($applicationId)')" -ErrorAction SilentlyContinue).RequiredResourceAccess 
+    foreach ($rra in $requiredResourceAccess) {
+        foreach ($resourceAccess in $rra.ResourceAccess) {
+            $appRequiredResourceAccess += $resourceAccess.Id
+        }
+    }
+
+    $appRoleAssignments = (Invoke-MgGraphRequest -Uri "v1.0/servicePrincipals(appId='$($applicationId)')/appRoleAssignments" -ErrorAction SilentlyContinue).Value
+
+    foreach ($appRoleAssignment in $appRoleAssignments) {
+        foreach ($a in $appRoleAssignment) {
+            $appIdRole = $a.Get_Item("appRoleId")
+            if (!$appRequiredResourceAccess.Contains($appIdRole)) {
+                $appRoleIds += $a.Get_Item("Id")
+                Write-Progress ("Adding AppIdRole to be removed: " + $appIdRole)
+            }
+        }
+    }
+     
+    foreach ($appRoleAssignmentId in $appRoleIds) {
+        Invoke-MgGraphRequest -Uri "v1.0/servicePrincipals(appId='$($applicationId)')/appRoleAssignments/$($appRoleAssignmentId)" -Method DELETE -ErrorAction SilentlyContinue
+        Write-Progress ("Removed App Role Assignment Id:" + $appRoleAssignmentId)
+    }
 }
 
 function CreateApplication([parameter(mandatory)][String]$appName, [parameter(mandatory)][System.Collections.Generic.List[Microsoft.Graph.PowerShell.Models.MicrosoftGraphRequiredResourceAccess]]$requiredResourceAccess) {
@@ -138,6 +166,7 @@ function GetExchangeApiPermissions() {
     [string[]]$roles = GetExchangePermissionsRoles
     return GenerateRequiredResourceAccess -resourceAppId $exchangeAppId -roles $roles
 }
+
 function GetExchangePermissionsRoles() {
     [string[]]$roles = @(
         #full_access_as_app
@@ -221,8 +250,7 @@ function CreateAppRegistrationInternal ([parameter(mandatory)][String]$token, [p
     CreateAppRegistration -workFolder $certificateFolder -azureEnvironment $azureEnvironment -certificatePassword $certificatePassword -certificateName $certificateName -token $token -appName $appNameDefault
 }
 
-
-function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$azureEnvironment, [System.Management.Automation.SwitchParameter]$limitedScope, [String]$certificatePassword, [System.Management.Automation.SwitchParameter]$userOutput, [parameter(mandatory)][String]$appName, [String]$certificateName, [String]$token) {
+function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$azureEnvironment, [System.Management.Automation.SwitchParameter]$limitedScope, [String]$certificatePassword, [parameter(mandatory)][String]$appName, [String]$certificateName, [String]$token) {
     Write-Progress ("Running as " + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
     try {
         Set-Location -Path $workFolder
@@ -247,13 +275,13 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         Write-Progress "Ensuring NuGet is installed"
         Get-PackageProvider -Name "NuGet" -ForceBootstrap | Out-Null
 
-        ImportModules -moduleName Microsoft.Graph.Identity.DirectoryManagement -requiredVersion 2.4.0
-        ImportModules -moduleName Microsoft.Graph.Applications -requiredVersion 2.4.0
+        ImportModules -moduleName Microsoft.Graph.Identity.DirectoryManagement -requiredVersion 2.10.0
+        ImportModules -moduleName Microsoft.Graph.Applications -requiredVersion 2.10.0
         if ($limitedScope) {
-            ImportModules -moduleName Microsoft.Graph.Files -requiredVersion 2.4.0
-            ImportModules -moduleName Microsoft.Graph.Sites -requiredVersion 2.4.0
-            ImportModules -moduleName Microsoft.Graph.Groups -requiredVersion 2.4.0
-            ImportModules -moduleName Microsoft.Graph.Teams -requiredVersion 2.4.0
+            ImportModules -moduleName Microsoft.Graph.Files -requiredVersion 2.10.0
+            ImportModules -moduleName Microsoft.Graph.Sites -requiredVersion 2.10.0
+            ImportModules -moduleName Microsoft.Graph.Groups -requiredVersion 2.10.0
+            ImportModules -moduleName Microsoft.Graph.Teams -requiredVersion 2.10.0
             ImportModules -moduleName ExchangeOnlineManagement -requiredVersion 3.2.0
         }
         if (!$internal) {
@@ -314,7 +342,8 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         Write-Progress "Applying Application Roles" -Completed
         #--------------------------- END GRANT ADMIN CONSENT -------------------------
         $policy = $null
-        if (!$userOutput) {
+        RemoveRequiredResourceAccess -applicationId $app.AppId
+        if ($internal) {
             return $app.AppId + "|" + $certPath;
         }
         
