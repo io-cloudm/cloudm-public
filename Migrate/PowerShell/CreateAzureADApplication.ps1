@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 $ErrorActionPreference = "Stop"
 $EXHANGE_ROLE_TEMPLATE_ID = "29232cdf-9323-42fd-ade2-1d097af3e4de"
 $MaximumFunctionCount = 8192
@@ -198,6 +198,8 @@ function GetMicrosoftGraphPermissionsRoles([bool]$limitedScope) {
         "35930dcf-aceb-4bd1-b99a-8ffed403c974"
         #Mail.ReadBasic
         "6be147d2-ea4f-4b5a-a3fa-3eab6f3c140a"
+        #ChannelMessage.Read.All
+        "7b2449af-6ccd-4f4d-9f78-e550c193f0d1"
     )
     switch ($limitedScope) {
         #Sites.Selected
