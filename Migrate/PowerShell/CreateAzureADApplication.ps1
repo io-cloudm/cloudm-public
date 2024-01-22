@@ -2,6 +2,7 @@
 $ErrorActionPreference = "Stop"
 $EXHANGE_ROLE_TEMPLATE_ID = "29232cdf-9323-42fd-ade2-1d097af3e4de"
 $MaximumFunctionCount = 8192
+$scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
 function ImportModules([parameter(mandatory)][String]$moduleName, 
     [parameter(mandatory)][String]$requiredVersion) {
     Write-Progress "Importing modules"
@@ -252,19 +253,19 @@ function CreateAppRegistrationInternal ([parameter(mandatory)][String]$token, [p
     CreateAppRegistration -workFolder $certificateFolder -azureEnvironment $azureEnvironment -certificatePassword $certificatePassword -certificateName $certificateName -token $token -appName $appNameDefault
 }
 
-function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [parameter(mandatory)][String]$azureEnvironment, [System.Management.Automation.SwitchParameter]$limitedScope, [String]$certificatePassword, [parameter(mandatory)][String]$appName, [String]$certificateName, [String]$token) {
+function CreateAppRegistration([parameter(mandatory)][String]$certificateFolder, [parameter(mandatory)][String]$azureEnvironment, [System.Management.Automation.SwitchParameter]$limitedScope, [String]$certificatePassword, [parameter(mandatory)][String]$appName, [String]$certificateName, [String]$token) {
     Write-Progress ("Running as " + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
     try {
-        Set-Location -Path $workFolder
+        Set-Location -Path $scriptPath
         $internal = $token;
         Write-Host "Import Modules" -ForegroundColor Green
-        Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-Certificate" -internal $internal
-        Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-Common" -internal $internal
+        Import-CloudMModule -workFolder $scriptPath -moduleName "CloudM-Certificate" -internal $internal
+        Import-CloudMModule -workFolder $scriptPath -moduleName "CloudM-Common" -internal $internal
         if ($limitedScope) {
-            Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-Retry" -internal $internal
-            Import-CloudMModule -workFolder $workFolder -moduleName "CloudM-ProcessCsvs" -internal $internal
+            Import-CloudMModule -workFolder $scriptPath -moduleName "CloudM-Retry" -internal $internal
+            Import-CloudMModule -workFolder $scriptPath -moduleName "CloudM-ProcessCsvs" -internal $internal
         }
-        CheckDirectory -path $workFolder
+        CheckDirectory -path $scriptPath
         if (!$internal) {
             $appName = CleanAppName -value $appName
             $appName = "CloudM-$($appName)"
@@ -306,7 +307,7 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         }
         # Create certificate
         # Generate dates
-        CreateUpdateCertificate -appId $app.AppId -workFolder $workFolder -certName $certName -secureCertificatePassword $secureCertificatePassword -certStartDate $certStartDate -certEndDate $certEndDate | Out-Null
+        CreateUpdateCertificate -appId $app.AppId -workFolder $scriptPath -certName $certName -secureCertificatePassword $secureCertificatePassword -certStartDate $certStartDate -certEndDate $certEndDate | Out-Null
         
         Write-Host "Certificate created. $($appName) - ($($app.AppId))" -ForegroundColor Green
 
@@ -317,7 +318,7 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
         #Assign exchange online admin roll
         Write-Progress "Applying Application Roles"
         ApplyExchangeAdminRole -servicePrincipalId $servicePrincipalId
-        $certPath = $workFolder + "\" + $certName + ".pfx"
+        $certPath = $scriptPath + "\" + $certName + ".pfx"
         Write-Host "Exchange admin roll applied. $($appName) - ($($app.AppId))" -ForegroundColor Green
         # ---------------------  GRANT ADMIN CONSENT ---------------------------------
 
@@ -353,11 +354,11 @@ function CreateAppRegistration([parameter(mandatory)][String]$workFolder, [param
             $mailGroupAlias = $appName 
             $policy = ApplyLimitedMailPolicy -AppId $app.AppId -CertPath $certPath -SecureCertificatePassword $secureCertificatePassword -TenantName $app.PublisherDomain -AppName $appName -MailGroupAlias $mailGroupAlias
         }
-        $destinationPath = Join-Path -Path $workFolder -ChildPath "$($app.DisplayName) - $($app.PublisherDomain)"
+        $destinationPath = Join-Path -Path $certificateFolder -ChildPath "$($app.DisplayName) - $($app.PublisherDomain)"
         New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
         $appCertPath = $destinationPath + "\" + $certName + ".pfx"
         OutPutFile -app $app -certPath $appCertPath -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias -policy $policy -tenantId $tenantId
-        MoveFiles -sourceFolder $workFolder -appName $app.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath  -limitedScope $limitedScope
+        MoveFiles -sourceFolder $certificateFolder -appName $app.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath  -limitedScope $limitedScope
     }
     catch {
         Write-Host "The message was: $($_)" -ForegroundColor Red
@@ -385,7 +386,7 @@ function Import-CloudMModule ([String]$workFolder, [String]$moduleName, $interna
     Write-Host "Importing CloudM Module: $($moduleName)"
     $path = Join-Path -Path $workFolder -ChildPath "$($moduleName).psm1" 
     if (!(Test-Path -Path $path -PathType Leaf)) {
-        throw (New-Object System.IO.FileNotFoundException("File not found: $retryPms1", $retryPms1))
+        throw (New-Object System.IO.FileNotFoundException("File not found: $($moduleName).psm1"))
     }
     else {
         Import-Module .\$($moduleName) -Force
@@ -461,10 +462,10 @@ function CreateAzureAppRegistration() {
     }
     Read-Host "$($nl)$($nl)You are using the interactive mode. You will be prompted by a window to connect to Graph via your Global Admin Credentails. Please enter to continue"
     if ($limitedScope -eq $true) {
-        CreateAppRegistration -workFolder "$($location)" -certificatePassword $certificatePassword -appName "$($appName)" -azureEnvironment $azureEnvironment -limitedScope
+        CreateAppRegistration -certificateFolder "$($location)" -certificatePassword $certificatePassword -appName "$($appName)" -azureEnvironment $azureEnvironment -limitedScope
     }
     else {
-        CreateAppRegistration -workFolder "$($location)" -certificatePassword $certificatePassword -appName "$($appName)" -azureEnvironment $azureEnvironment
+        CreateAppRegistration -certificateFolder "$($location)" -certificatePassword $certificatePassword -appName "$($appName)" -azureEnvironment $azureEnvironment
     }
 }
 
