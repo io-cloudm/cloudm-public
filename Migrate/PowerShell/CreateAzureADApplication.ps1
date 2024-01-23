@@ -358,7 +358,7 @@ function CreateAppRegistration([parameter(mandatory)][String]$certificateFolder,
         New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
         $appCertPath = $destinationPath + "\" + $certName + ".pfx"
         OutPutFile -app $app -certPath $appCertPath -secureCertificatePassword $secureCertificatePassword -mailGroupAlias $mailGroupAlias -policy $policy -tenantId $tenantId
-        MoveFiles -sourceFolder $certificateFolder -appName $app.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath  -limitedScope $limitedScope
+        MoveFiles -sourceFolder $scriptPath -appName $app.DisplayName -publisherDomain $app.PublisherDomain -destinationPath $destinationPath  -limitedScope $limitedScope
     }
     catch {
         Write-Host "The message was: $($_)" -ForegroundColor Red
@@ -416,7 +416,7 @@ function OutPutFile([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMi
     }
     $output = $nl + $nl + "Azure AD application registered. $($output)"
     Write-Host $output -ForegroundColor Green
-    $output | Out-File -FilePath "$workFolder\$($app.DisplayName)$($app.PublishName).txt"
+    $output | Out-File -FilePath "$scriptPath\$($app.DisplayName)$($app.PublishName).txt"
 }
 
 function ApplyExchangeAdminRole($servicePrincipalId) {
