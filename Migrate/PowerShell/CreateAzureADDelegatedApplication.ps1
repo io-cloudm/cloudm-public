@@ -110,6 +110,11 @@ function GenerateDelegatedApplicationApiPermissions() {
                 #User.Read
                 Id   = "e1fe6dd8-ba31-4d61-89e7-88639da4683d";
                 Type = "Scope"
+            },
+            @{
+                #offline 
+                Id   = "7427e0e9-2fba-42fe-b0c0-848c9e6a8182";
+                Type = "Scope"
             }
         )
     }
@@ -207,4 +212,4 @@ function CreateAzureAppRegistration() {
     CreateAppDelegatedRegistration -appName $appName -redirectUris "https://cloudm.local" -azureEnvironment $azureEnvironment
 }
 
-CreateAppDelegatedRegistration
+CreateAzureAppRegistration
