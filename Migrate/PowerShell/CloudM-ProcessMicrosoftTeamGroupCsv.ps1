@@ -88,11 +88,11 @@ function GetSecurePassword ($password) {
     return $securePassword
 }
 
-$WorkFolder = "C:\Projects\cloudm-public\Migrate\PowerShell"
-$MailGroupAlias = "CloudM-LimitedTestAppAshley"
-$TenantName = "test365.cloudm.io"
-$ClientAppId = "f31a2a1c-cceb-4d6f-af44-a1dc4f2c20ec"
-$ClientAppCertificate = "C:\Projects\cloudm-public\Migrate\PowerShell\CloudM-LimitedTestAppAshley - test365.cloudm.io\CloudM-LimitedTestAppAshley-test365.cloudm.io.pfx"
+$WorkFolder = ""
+$MailGroupAlias = ""
+$TenantName = ""
+$ClientAppId = ""
+$ClientAppCertificate = ""
 $Environment = "Global"
 ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
 
