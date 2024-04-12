@@ -387,7 +387,7 @@ function CreateAzureAppRegistration() {
         '0' { $false }
         default { $false }
     }
-    Read-Host "$($nl)$($nl)You are using the interactive mode. You will be prompted by a window to connect to Graph via your Global Admin Credentails. Please enter to continue"
+    Read-Host "$($nl)$($nl)You are using the interactive mode. You will be prompted by a window to connect to Graph via your Global Admin Credentails. Press enter to continue"
     if ($limitedScope -eq $true) {
         CreateAppRegistration -certificateFolder "$($location)" -certificatePassword $certificatePassword -appName "$($appName)" -azureEnvironment $azureEnvironment -limitedScope
     }
