@@ -552,7 +552,7 @@ function ConnectExchangeOnline([parameter(mandatory)][String]$AppId, [parameter(
         {
             Connect-ExchangeOnline -CertificateFilePath $CertPath -CertificatePassword $SecureCertificatePassword -AppId $AppId -Organization $TenantName -ShowBanner:$false -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
             CheckErrors -ErrorToProcess $ErrorResult
-        } | RetryCommand -TimeoutInSeconds 5 -RetryCount 10 -Context "Connect to Exchange Online"
+        } | RetryCommand -TimeoutInSeconds 15 -RetryCount 10 -Context "Connect to Exchange Online"
     }
 }
 

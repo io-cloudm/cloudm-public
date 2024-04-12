@@ -88,8 +88,8 @@ function GetSecurePassword ($password) {
     return $securePassword
 }
 
-$WorkFolder = "C:\Projects\cloudm-public\Migrate\PowerShell"
-$ClientAppId = "f31a2a1c-cceb-4d6f-af44-a1dc4f2c20ec"
+$WorkFolder = ""
+$ClientAppId = ""
 $Environment = "Global"
 
 ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
