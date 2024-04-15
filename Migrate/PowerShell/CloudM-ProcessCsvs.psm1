@@ -318,7 +318,8 @@ function ApplyLimitedMailPolicy([parameter(mandatory)][String]$AppId,
     [parameter(mandatory)][String]$TenantName,
     [parameter(mandatory)][String]$MailGroupAlias,
     [SecureString]$SecureCertificatePassword) {
-
+    Write-Host "Waiting: $AppId 15 Seconds"
+    Start-Sleep -Seconds 15
     ConnectExchangeOnline -AppId $AppId -CertPath $CertPath -SecureCertificatePassword $SecureCertificatePassword -TenantName $TenantName
     $distributionGroup = GetCreateMailGroup -MailGroupAlias $MailGroupAlias
     $policy = CreateUpdateApplicationAccessPolicy -AppId $AppId -AppName $AppName -CertPath $CertPath -MailGroupAlias $distributionGroup.PrimarySmtpAddress
