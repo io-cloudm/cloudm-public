@@ -479,7 +479,6 @@ function ProcessMicrosoftTeamGroupCsv (
 function ProcessSharePointSiteCsv (
     [parameter(mandatory)][String]$WorkFolder,
     [parameter(mandatory)][String]$ClientAppId,
-    
     [parameter(mandatory)][String]$Environment, 
     [SecureString]$SecureCertificatePassword, 
     [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {

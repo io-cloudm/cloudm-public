@@ -29,9 +29,13 @@ function ImportModules([parameter(mandatory)][String]$moduleName,
             Write-Progress "$moduleName Module Version $requiredVersion is already installed." -Completed
         }
     }
-    Write-Host "Importing $moduleName Module"
-
-    Import-Module $moduleName -Scope Global -RequiredVersion $requiredVersion -ErrorAction SilentlyContinue
+    if(Get-Module -ListAvailable -Name $moduleName) {
+        Write-Host "Module $moduleName $requiredVersion is already imported."
+    }
+    else {
+        Write-Host "Importing $moduleName $requiredVersion Module..."
+        Import-Module $moduleName -Scope Global -RequiredVersion $requiredVersion -ErrorAction SilentlyContinue
+    }
 }
 
 function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
@@ -41,9 +45,6 @@ function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
     if ($limitedScope) {
         ImportModules -moduleName Microsoft.Graph.Files -requiredVersion 2.10.0
         ImportModules -moduleName Microsoft.Graph.Sites -requiredVersion 2.10.0
-        ImportModules -moduleName Microsoft.Graph.Groups -requiredVersion 2.10.0
-        ImportModules -moduleName Microsoft.Graph.Teams -requiredVersion 2.10.0
-        ImportModules -moduleName ExchangeOnlineManagement -requiredVersion 3.2.0
     }
     $retryPms1 = Join-Path -Path $WorkFolder -ChildPath "CloudM-Retry.psm1" 
     if (!(Test-Path -Path $retryPms1 -PathType Leaf)) {
@@ -97,7 +98,6 @@ ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
 
 $ProcessSharePointSiteCsv = @{
     WorkFolder                = $WorkFolder
-    SecureCertificatePassword = GetSecurePassword("")
     ClientAppId               = $ClientAppId
     Environment               = $Environment
 }
