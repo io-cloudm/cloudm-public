@@ -29,9 +29,13 @@ function ImportModules([parameter(mandatory)][String]$moduleName,
             Write-Progress "$moduleName Module Version $requiredVersion is already installed." -Completed
         }
     }
-    Write-Host "Importing $moduleName Module"
-
-    Import-Module $moduleName -Scope Global -RequiredVersion $requiredVersion -ErrorAction SilentlyContinue
+    if(Get-Module -ListAvailable -Name $moduleName) {
+        Write-Host "Module $moduleName $requiredVersion is already imported."
+    }
+    else {
+        Write-Host "Importing $moduleName $requiredVersion Module..."
+        Import-Module $moduleName -Scope Global -RequiredVersion $requiredVersion -ErrorAction SilentlyContinue
+    }
 }
 
 function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
@@ -93,13 +97,14 @@ $MailGroupAlias = ""
 $TenantName = ""
 $ClientAppId = ""
 $ClientAppCertificate = ""
+$ClientAppCertificatePassword = ""
 $Environment = "Global"
 ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
 
 
 $ProcessMicrosoftTeamGroupCsv = @{
     WorkFolder                = $WorkFolder
-    SecureCertificatePassword = GetSecurePassword("")
+    SecureCertificatePassword = GetSecurePassword($ClientAppCertificatePassword)
     MailGroupAlias            = $MailGroupAlias
     ClientAppId               = $ClientAppId
     ClientAppCertificate      = $ClientAppCertificate
