@@ -17,7 +17,7 @@
   It must start with a lower case letter, followed by one or more lower case alphanumerical characters that can be separated by hyphens. It cannot have a trailing hyphen.
 
   .PARAMETER Scope
-  Specifies the scopes required for the ClouM Migrate. Scope must be one of 'All', 'Standard', 'SourceLimited', 'DestinationLimited','Vault' or 'Storage'.
+  Specifies the scopes required for the ClouM Migrate. Scope must be one of 'All', 'Standard', 'SourceLimited', 'DestinationLimited','Vault', 'Spaces' or 'Storage'.
 
   .PARAMETER KeyType
   Specifies a the type of key to generate. Must be one of 'P12' or 'JSON'. P12 is used as a default
