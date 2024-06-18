@@ -17,7 +17,7 @@
   It must start with a lower case letter, followed by one or more lower case alphanumerical characters that can be separated by hyphens. It cannot have a trailing hyphen.
 
   .PARAMETER Scope
-  Specifies the scopes required for the ClouM Migrate. Scope must be one of 'All', 'Standard', 'SourceLimited', 'DestinationLimited','Vault' or 'Storage'.
+  Specifies the scopes required for the ClouM Migrate. Scope must be one of 'All', 'Standard', 'SourceLimited', 'DestinationLimited','Vault', 'Spaces' or 'Storage'.
 
   .PARAMETER KeyType
   Specifies a the type of key to generate. Must be one of 'P12' or 'JSON'. P12 is used as a default
@@ -56,9 +56,9 @@ param(
     [String]
     $ServiceAccountId,
 
-    [Parameter(Mandatory=$true, Position=2, ValueFromPipeline=$false, HelpMessage="Scope must be one of 'All', 'Standard', 'SourceLimited', 'DestinationLimited', 'Vault' or 'Storage'")]
+    [Parameter(Mandatory=$true, Position=2, ValueFromPipeline=$false, HelpMessage="Scope must be one of 'All', 'Standard', 'SourceLimited', 'DestinationLimited', 'Vault', 'Spaces' or 'Storage'")]
     [Alias("S")]
-    [ValidateSet("All", "Standard", "SourceLimited", "DestinationLimited", "Vault", "Storage")]
+    [ValidateSet("All", "Standard", "SourceLimited", "DestinationLimited", "Vault", "Spaces", "Storage")]
     [String]
     $Scope = "Standard",
 
@@ -71,9 +71,7 @@ param(
     [Parameter(Mandatory=$false, Position=4, ValueFromPipeline=$false, HelpMessage="Output Path for the key and log e.g. C:\CloudM\GCPConfig")]
     [Alias("O")]
     [String]
-    $OutputPath = "C:\CloudM\GCPConfig"
-
-    
+    $OutputPath = "C:\CloudM\GCPConfig"   
 )
 
 $ErrorActionPreference = 'Stop'
@@ -158,7 +156,8 @@ Function Build-Scopes-List([string]$Scope = "Standard")
     "https://www.googleapis.com/auth/user.organization.read",
     "https://www.googleapis.com/auth/user.phonenumbers.read",
     "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile"
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/forms"
     )
 
     $SourceLimitedScopes = @(
@@ -181,6 +180,16 @@ Function Build-Scopes-List([string]$Scope = "Standard")
     "https://www.googleapis.com/auth/devstorage.read_write"
     )
 
+    #confim these - do we need bot?
+    $SpacesScopes = @(
+        "https://www.googleapis.com/auth/chat.spaces",
+        "https://www.googleapis.com/auth/chat.memberships",
+        "https://www.googleapis.com/auth/chat.memberships.app",
+        "https://www.googleapis.com/auth/chat.messages",
+        "https://www.googleapis.com/auth/chat.import",
+        "https://www.googleapis.com/auth/chat.bot"
+    )
+
     $CombinedScopes = @()
 
     Switch($Scope) 
@@ -189,9 +198,10 @@ Function Build-Scopes-List([string]$Scope = "Standard")
         "SourceLimited" { $CombinedScopes= $BaseScopes + $SourceLimitedScopes }
         "DestinationLimited" { $CombinedScopes= $BaseScopes + $DestinationLimitedScopes }
         "Vault" { $CombinedScopes= $BaseScopes + $VaultScopes + $StandardScopes}
+        "Spaces" { $CombinedScopes = $BaseScopes + $SpacesScopes + $StandardScopes}
         "Storage" { $CombinedScopes= $BaseScopes + $StandardScopes}
-        "All" { $CombinedScopes= $BaseScopes + $VaultScopes + $StandardScopes}
-        default { $CombinedScopes= $BaseScopes + $VaultScopes + $StandardScopes}
+        "All" { $CombinedScopes= $BaseScopes + $VaultScopes + $SpacesScopes + $StandardScopes}
+        default { $CombinedScopes= $BaseScopes + $VaultScopes + $SpacesScopes + $StandardScopes}
     }
 
     Return $CombinedScopes
@@ -220,18 +230,23 @@ Function Build-API-List([string]$Scope = "Standard")
     $VaultApis = @(
     "vault.googleapis.com"
     )
+
+    $SpacesApis = @(
+    "chat.googleapis.com"
+    )
     
     $CombinedApis = @()
 
     Switch($Scope) 
     {
-        "Standard" { $CombinedApis = $BaseApis}
+        "Standard" { $CombinedApis = $BaseApis }
         "SourceLimited" { $CombinedApis = $BaseApis }
         "DestinationLimited" { $CombinedApis = $BaseApis }
         "Vault" { $CombinedApis = $BaseApis + $VaultApis + $CloudStorageApis }
+        "Spaces" { $CombinedApis = $BaseApis + $SpacesApis + $CloudStorageApis }
         "Storage" { $CombinedApis = $BaseApis + $CloudStorageApis }
-        "All" { $CombinedApis = $BaseApis + $VaultApis + $CloudStorageApis }
-        default { $CombinedApis = $BaseApis + $VaultApis + $CloudStorageApis }
+        "All" { $CombinedApis = $BaseApis + $VaultApis + $SpacesApis + $CloudStorageApis }
+        default { $CombinedApis = $BaseApis + $VaultApis + $SpacesApis + $CloudStorageApis }
     }
 
     Return $CombinedApis
