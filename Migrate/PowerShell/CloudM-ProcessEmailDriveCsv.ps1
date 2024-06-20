@@ -114,7 +114,7 @@ $ProcessEmailDriveCsv = @{
     TenantName                = $TenantName
 }
 
-ProcessEmailDriveCsv @ProcessEmailDriveCsv -DisconnectSesstion
+ProcessEmailDriveCsv @ProcessEmailDriveCsv -DisconnectSession
 
 
 #Copy Reports
