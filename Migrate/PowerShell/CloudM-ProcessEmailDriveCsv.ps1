@@ -103,7 +103,6 @@ $ClientAppCertificatePassword = ""
 $Environment = "Global"
 ImportCloudMModules -WorkFolder $WorkFolder -limitedScope $true
 
-
 $ProcessEmailDriveCsv = @{
     WorkFolder                = $WorkFolder
     SecureCertificatePassword = GetSecurePassword($ClientAppCertificatePassword)
@@ -114,7 +113,7 @@ $ProcessEmailDriveCsv = @{
     TenantName                = $TenantName
 }
 
-ProcessEmailDriveCsv @ProcessEmailDriveCsv -DisconnectSesstion
+ProcessEmailDriveCsv @ProcessEmailDriveCsv -DisconnectSession
 
 
 #Copy Reports

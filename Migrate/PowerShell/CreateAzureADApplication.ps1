@@ -329,7 +329,7 @@ function OutPutFile([parameter(mandatory)][Microsoft.Graph.PowerShell.Models.IMi
     $nl = [Environment]::NewLine
     $output = ($nl + $nl + "Client ID: " + $app.AppId + ", App Name: " + $app.DisplayName)
     $output += ($nl + "Certificate Path: " + $certPath)
-    if ($secureCertificatePasswor) {
+    if ($secureCertificatePassword) {
         $output += ($nl + "Certificate Password: " + [System.Net.NetworkCredential]::new("", $secureCertificatePassword).Password)
     }
     if ($policy) {

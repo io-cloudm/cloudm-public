@@ -347,9 +347,11 @@ function ProcessEmailDriveCsv (
     [parameter(mandatory)][String]$ClientAppId, 
     [parameter(mandatory)][String]$ClientAppCertificate,
     [SecureString]$SecureCertificatePassword, 
-    [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {
+    [System.Management.Automation.SwitchParameter]$DisconnectSession) {
     try {
-    
+
+        Write-Host $SecureCertificatePassword    
+
         $file = Join-Path -Path $WorkFolder -ChildPath "EmailDrive.csv" 
         if (!(Test-Path -Path $file -PathType Leaf)) {
             Write-Host "File: $($file) could not be found. Exiting Process Csv" -ForegroundColor Yellow
@@ -542,7 +544,7 @@ function ConnectMsGraph ([parameter(mandatory)][String]$Environment) {
             "Group.Read.All"
             "Sites.FullControl.All"
         )
-        Connect-MgGraph -Environment $Environment -Scope $neededScopes -NoWelcome -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
+        Connect-MgGraph -Environment $Environment -Scope $neededScopes -ErrorAction SilentlyContinue -ErrorVariable ErrorResult
         CheckErrors -ErrorToProcess $ErrorResult
     } | RetryCommand -TimeoutInSeconds 10 -RetryCount 10 -Context "Connect to MgGraph"
 }
