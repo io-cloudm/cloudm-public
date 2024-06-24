@@ -101,7 +101,7 @@ $ProcessSharePointSiteCsv = @{
     ClientAppId               = $ClientAppId
     Environment               = $Environment
 }
-ProcessSharePointSiteCsv @ProcessSharePointSiteCsv -DisconnectSesstion
+ProcessSharePointSiteCsv @ProcessSharePointSiteCsv -DisconnectSession
 
 #Copy Reports
 MoveFiles -sourceFolder $WorkFolder -ClientAppId $ClientAppId

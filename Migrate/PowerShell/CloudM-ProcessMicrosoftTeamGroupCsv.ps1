@@ -112,7 +112,7 @@ $ProcessMicrosoftTeamGroupCsv = @{
     TenantName                = $TenantName
 }
 
-ProcessMicrosoftTeamGroupCsv @ProcessMicrosoftTeamGroupCsv -DisconnectSesstion
+ProcessMicrosoftTeamGroupCsv @ProcessMicrosoftTeamGroupCsv -DisconnectSession
 
 
 #Copy Reports

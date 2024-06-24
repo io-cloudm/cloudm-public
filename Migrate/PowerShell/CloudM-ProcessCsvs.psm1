@@ -161,8 +161,9 @@ function ProcessDrive ([parameter(mandatory)][System.Object]$Row, [parameter(man
         }
         $driveUrl = (GetDriveUrl -webUrl $drive.WebUrl -strip 1)
 
-        $sitePath = $driveUrl.Replace("https://$($TenantHost)", "")
-        $siteId = (Invoke-MgGraphRequest -Uri "v1.0/sites/$($TenantHost):$($sitePath)" -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError).Id
+        
+        $modifiedUrl = $driveUrl -replace '^.*/personal', '/personal'
+        $siteId = (Invoke-MgGraphRequest -Uri "v1.0/sites/$($TenantHost):$($modifiedUrl)" -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError).Id
         if ((HasError -Row $Row -ProcessDriveError $ProcessDriveError -isUser $true)) {
             return
         }
@@ -347,7 +348,7 @@ function ProcessEmailDriveCsv (
     [parameter(mandatory)][String]$ClientAppId, 
     [parameter(mandatory)][String]$ClientAppCertificate,
     [SecureString]$SecureCertificatePassword, 
-    [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {
+    [System.Management.Automation.SwitchParameter]$DisconnectSession) {
     try {
     
         $file = Join-Path -Path $WorkFolder -ChildPath "EmailDrive.csv" 
@@ -398,7 +399,7 @@ function ProcessEmailDriveCsv (
         $csv | Export-Csv $file -NoType
     }
     finally {
-        if ($DisconnectSesstion) {
+        if ($DisconnectSession) {
             Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
             Write-Host "Disconnect-MgGraph"
             Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
@@ -416,7 +417,7 @@ function ProcessMicrosoftTeamGroupCsv (
     [parameter(mandatory)][String]$ClientAppCertificate,
     
     [SecureString]$SecureCertificatePassword, 
-    [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {
+    [System.Management.Automation.SwitchParameter]$DisconnectSession) {
     try {
     
         $file = Join-Path -Path $WorkFolder -ChildPath "MicrosoftTeamGroup.csv" 
@@ -467,7 +468,7 @@ function ProcessMicrosoftTeamGroupCsv (
         $csv | Export-Csv $file -NoType
     }
     finally {
-        if ($DisconnectSesstion) {
+        if ($DisconnectSession) {
             Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
             Write-Host "Disconnect-MgGraph"
             Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
@@ -481,7 +482,7 @@ function ProcessSharePointSiteCsv (
     [parameter(mandatory)][String]$ClientAppId,
     [parameter(mandatory)][String]$Environment, 
     [SecureString]$SecureCertificatePassword, 
-    [System.Management.Automation.SwitchParameter]$DisconnectSesstion) {
+    [System.Management.Automation.SwitchParameter]$DisconnectSession) {
     try {
     
         $file = Join-Path -Path $WorkFolder -ChildPath "SharePointSites.csv" 
@@ -506,7 +507,7 @@ function ProcessSharePointSiteCsv (
         $csv | Export-Csv $file -NoType
     }
     finally {
-        if ($DisconnectSesstion) {
+        if ($DisconnectSession) {
             Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
             Write-Host "Disconnect-MgGraph"
             Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
