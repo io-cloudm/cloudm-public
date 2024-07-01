@@ -129,7 +129,7 @@ function GenerateResourceAccess($resourceId, $resourceType) {
 }
 
 
-function CreateAppDelegatedRegistration($appName, $redirectUris, $azureEnvironment, $token) {
+function CreateAppDelegatedRegistration([parameter(mandatory)][String]$appName, [parameter(mandatory)][String]$redirectUris, [parameter(mandatory)][String]$azureEnvironment, $token) {
     Write-Progress ("Running as " + [System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
     $internal = $token;
     $dateFormat = (Get-Culture).DateTimeFormat.ShortDatePattern
@@ -207,9 +207,10 @@ function CreateAppDelegatedRegistration($appName, $redirectUris, $azureEnvironme
 
 function CreateAzureAppRegistration() {
     $appName = Read-Host 'Enter the application Name'
+    $redirectUris = Read-Host "Enter the redirect URI`nIf using CloudM Migrate Hosted, enter the URL of https://migrate.cloudm.io`nIf using CloudM Migrate Self Hosted, enter the URL of your CloudM Migrate Self Hosted instance eg https://cloudm.local"
     $azureEnvironment = Read-Host "Enter the number that corresponds to your Cloud Deployment`n`n0 Global`n1 China`n2 US Gov `n3 US GovDoD"
     Read-Host "$($nl)$($nl)You are using the interactive mode. You will be prompted by a window to connect to Graph via your Global Admin Credentails. Please enter to continue"
-    CreateAppDelegatedRegistration -appName $appName -redirectUris "https://cloudm.local" -azureEnvironment $azureEnvironment
+    CreateAppDelegatedRegistration -appName $appName -redirectUris $redirectUris -azureEnvironment $azureEnvironment
 }
 
 CreateAzureAppRegistration
