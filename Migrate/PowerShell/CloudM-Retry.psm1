@@ -27,7 +27,14 @@
                 }
                 if ($attempts -eq $retryCount) {
                     Write-Host "Failed to execute command '$context'. Total retry attempts: $retryCount" -ForegroundColor Red
-                    $lastRetryException = $_.exception.message
+                    $e = $_.Exception
+                    $msg = $e.Message
+                    while ($e.InnerException) {
+                        $ e = $e.InnerException
+                        $msg += "`n" + $e.Message
+                    }
+                    $lastRetryException = $msg
+                    Write-Host $_ -ForegroundColor Red
                 }
             }
         } while ($attempts -le $retryCount)

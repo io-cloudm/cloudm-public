@@ -70,7 +70,7 @@ function ProcessEmail ([parameter(mandatory)][System.Object]$Row, [parameter(man
 
 }
 
-function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId, [parameter(mandatory)][String]$TenantHost) {
+function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId) {
     try {
         Write-Host "Processing Microsoft Team/Group"
         $group = {
@@ -112,8 +112,8 @@ function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Ro
                     $strip = 2
                 }
                 $webUrl = GetDriveUrl -webUrl $webUrl.WebUrl -strip $strip
-                $sitePath = $webUrl.Replace("https://$($TenantHost)", "")
-                $siteId = (Invoke-MgGraphRequest -Uri "v1.0/sites/$($TenantHost):$($sitePath)" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult).Id
+                $uri = [System.Uri]::new($webUrl)
+                $siteId = (Invoke-MgGraphRequest -Uri "v1.0/sites/$($uri.Host):$($uri.AbsolutePath)" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult).Id
                 if ($ErrorResult.Count -ge 1) {
                     Write-Host "Private/Shared Channel: $($channel.DisplayName) failed with $($ErrorResult[0].Exception)" -ForegroundColor Red
                     $privateChannelErrors += "Private/Shared Channel: $($channel.DisplayName) failed with: $($ErrorResult[0].Exception)"
@@ -150,20 +150,18 @@ function ProcessMicrosoftTeamGroupSite ([parameter(mandatory)][System.Object]$Ro
   
 }
 
-function ProcessDrive ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId, [parameter(mandatory)][String]$TenantHost) {
+function ProcessDrive ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId) {
 
     Write-Host "Processing Drive"
     $driveUrl = $null
     try {
-        $drive = Get-MgUserDefaultDrive -UserId $Row.Email -Property $SITE_PROPERTY_REQUEST -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError
+        $drive = Get-MgUser -UserId $Row.Email -Property "mySite" -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError
         if ((HasError -Row $Row -ProcessDriveError $ProcessDriveError -isUser $true)) {
             return
         }
-        $driveUrl = (GetDriveUrl -webUrl $drive.WebUrl -strip 1)
-
-        
-        $modifiedUrl = $driveUrl -replace '^.*/personal', '/personal'
-        $siteId = (Invoke-MgGraphRequest -Uri "v1.0/sites/$($TenantHost):$($modifiedUrl)" -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError).Id
+        $driveUrl = $drive.MySite
+        $uri = [System.Uri]::new($driveUrl)
+        $siteId = (Invoke-MgGraphRequest -Uri "v1.0/sites/$($uri.Host):$($uri.AbsolutePath)" -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError).Id
         if ((HasError -Row $Row -ProcessDriveError $ProcessDriveError -isUser $true)) {
             return
         }
@@ -191,12 +189,12 @@ function ProcessDrive ([parameter(mandatory)][System.Object]$Row, [parameter(man
     }
 }
 
-function ProcessSharePointSite ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId, [parameter(mandatory)][String]$TenantHost) {
+function ProcessSharePointSite ([parameter(mandatory)][System.Object]$Row, [parameter(mandatory)][String]$ClientAppId) {
 
     Write-Host "Processing SharePoint Site"
     try {
-        $sitePath = $Row.SiteUrl.Replace("https://$($TenantHost)", "")
-        $site = Invoke-MgGraphRequest -Uri "v1.0/sites/$($TenantHost):$($sitePath)" -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError
+        $uri = [System.Uri]::new($Row.SiteUrl)
+        $site = Invoke-MgGraphRequest -Uri "v1.0/sites/$($uri.Host):$($uri.AbsolutePath)" -ErrorAction SilentlyContinue -ErrorVariable ProcessDriveError
         if ((HasError -Row $Row -ProcessDriveError $ProcessDriveError -isUser $false)) {
             return
         }
@@ -264,28 +262,6 @@ function GetDriveUrl([parameter(mandatory)][String]$webUrl, [int]$strip) {
         }
     }
     return $webUrl
-}
-
-function GetRootSiteId() {
-    $siteId = {
-        (Get-MgSite -SiteId "Root" -Property $SITE_PROPERTY_REQUEST -ErrorAction SilentlyContinue -ErrorVariable ErrorResult).Id
-        CheckErrors -ErrorToProcess $ErrorResult
-    } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Get-MgSite Root"
-  
-    return $siteId
-}
-
-function GetHost([parameter(mandatory)][String]$id, [string]$insertUrl) {
-    $index = $id.IndexOf(',') 
-    $mySiteHost = $null
-    if ($index -ne -1) {
-        $mySiteHost = $id.Substring(0, $index)
-        $index = $mySiteHost.IndexOf('.')
-        if ($index -ne -1) {
-            $mySiteHost = $mySiteHost.Insert($index, $insertUrl)
-        }
-    }
-    return $mySiteHost
 }
 
 function CreateUpdateApplicationAccessPolicy([parameter(mandatory)][String]$AppId, [parameter(mandatory)][String]$AppName, [parameter(mandatory)][String]$CertPath, [parameter(mandatory)][String]$MailGroupAlias) {
@@ -363,8 +339,6 @@ function ProcessEmailDriveCsv (
         ConnectExchangeOnline -AppId $ClientAppId -CertPath $ClientAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantName $TenantName
         $csv = Import-Csv $file
         $initEmailCounter = 0
-        $siteId = GetRootSiteId 
-        $tenantHost = GetHost -id $siteId -insertUrl "-my"
         Write-Host "$($nl)$($nl)--------------------------------Processing EmailDrive.csv-----------------------------------------"
         foreach ($Row in $csv) {
             $Row | Add-Member -NotePropertyName "EmailStatus" -NotePropertyValue $NOT_APPLICABLE -Force
@@ -376,7 +350,7 @@ function ProcessEmailDriveCsv (
             Write-Host "$($nl)$($nl)--------------------------------Processing $($Row.Email) Starting-----------------------------------------"
             switch ($itemType) {
                 Drive {
-                    ProcessDrive -Row $Row -ClientAppId $ClientAppId  -TenantHost $tenantHost
+                    ProcessDrive -Row $Row -ClientAppId $ClientAppId
                     break
                 }
                 EMail {
@@ -387,7 +361,7 @@ function ProcessEmailDriveCsv (
                 EmailDrive {
                     ProcessEmail -Row $Row -MailGroupAlias $MailGroupAlias -Attempt $initEmailCounter
                     $initEmailCounter++
-                    ProcessDrive -Row $Row -ClientAppId $ClientAppId  -TenantHost $tenantHost
+                    ProcessDrive -Row $Row -ClientAppId $ClientAppId
                     break
                 }
                 default {
@@ -431,8 +405,6 @@ function ProcessMicrosoftTeamGroupCsv (
         $nl = [Environment]::NewLine
         ConnectMsGraph -Environment $Environment
         ConnectExchangeOnline -AppId $ClientAppId -CertPath $ClientAppCertificate -SecureCertificatePassword $SecureCertificatePassword -TenantName $TenantName
-        $siteId = GetRootSiteId 
-        $tenantHost = GetHost -id $siteId -insertUrl ""
         $csv = Import-Csv $file
         Write-Host "$($nl)$($nl)--------------------------------Processing MicrosoftTeamGroup.csv-----------------------------------------"
         foreach ($Row in $csv) {
@@ -445,7 +417,7 @@ function ProcessMicrosoftTeamGroupCsv (
             $microsoftTeamGroupItemType = [MicrosoftTeamGroupItemType]$Row.MicrosoftTeamGroupItemType
             switch ($microsoftTeamGroupItemType) {
                 Site {
-                    ProcessMicrosoftTeamGroupSite -Row $Row  -ClientAppId $ClientAppId -TenantHost $tenantHost
+                    ProcessMicrosoftTeamGroupSite -Row $Row  -ClientAppId $ClientAppId
                     break
                 }
                 EMail {
@@ -456,7 +428,7 @@ function ProcessMicrosoftTeamGroupCsv (
                 EmailSite {
                     ProcessEmail -Row $Row -MailGroupAlias $MailGroupAlias -Attempt $initEmailCounter
                     $initEmailCounter++
-                    ProcessMicrosoftTeamGroupSite -Row $Row  -ClientAppId $ClientAppId -TenantHost $tenantHost
+                    ProcessMicrosoftTeamGroupSite -Row $Row  -ClientAppId $ClientAppId
                     break
                 }
                 default {
@@ -492,8 +464,6 @@ function ProcessSharePointSiteCsv (
         }  
         $nl = [Environment]::NewLine
         ConnectMsGraph -Environment $Environment
-        $siteId = GetRootSiteId 
-        $tenantHost = GetHost -id $siteId -insertUrl ""
         $csv = Import-Csv $file
         Write-Host "$($nl)$($nl)--------------------------------Processing SharePointSites.csv-----------------------------------------"
         foreach ($Row in $csv) {
@@ -501,7 +471,7 @@ function ProcessSharePointSiteCsv (
             $Row | Add-Member -NotePropertyName "SiteStatus" -NotePropertyValue $NOT_APPLICABLE -Force
             $Row | Add-Member -NotePropertyName "SiteErrorMessage" -NotePropertyValue $NOT_APPLICABLE -Force
             Write-Host "$($nl)$($nl)--------------------------------Processing $($Row.SiteUrl) Starting-----------------------------------------"
-            ProcessSharePointSite -Row $Row -ClientAppId $ClientAppId  -TenantHost $tenantHost
+            ProcessSharePointSite -Row $Row -ClientAppId $ClientAppId
             Write-Host "--------------------------------Processing $($Row.SiteUrl) Completed-----------------------------------------"
         }
         $csv | Export-Csv $file -NoType
