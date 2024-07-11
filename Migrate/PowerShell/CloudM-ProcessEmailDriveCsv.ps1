@@ -2,41 +2,39 @@
 $MaximumFunctionCount = 8192
 function ImportModules([parameter(mandatory)][String]$moduleName, 
     [parameter(mandatory)][String]$requiredVersion) {
-    Write-Progress "Importing modules"
-    #Install and Import Graph Module
-    Write-Progress "Checking if $moduleName is installed"
-    $installedModule = Get-InstalledModule $moduleName -ErrorAction SilentlyContinue
-    if (!$installedModule) {
-        Write-Progress "$moduleName module is not installed."
-        Write-Progress "Installing $moduleName Module"
-        Write-Host "Installing $moduleName Module..." -ForegroundColor Green
-        Install-Module $moduleName -RequiredVersion $requiredVersion -Confirm:$false -Force
-        Write-Progress "$moduleName Module installed successfully."
-
+    
+    # Check if the module is already loaded
+    $loadedModule = Get-Module -Name $moduleName -ListAvailable -verbose
+    if ($loadedModule) {
+        Write-Host "$moduleName module is already loaded." -ForegroundColor Green
     }
     else {
-        $stringVersion = (Get-InstalledModule $moduleName).Version.ToString()
-        Write-Progress "$moduleName module is already installed with the version " 
-        Write-Progress $stringVersion
-
-        if (!($stringVersion -eq $requiredVersion)) {
-            Write-Host "Module version is different from $requiredVersion. Installing the $requiredVersion version"
-            Write-Host "Installing $moduleName $requiredVersion Module..." -ForegroundColor Green
+        # Check if the module is installed
+        Write-Progress "Importing modules"
+        Write-Progress "Checking if $moduleName is installed"
+        $installedModule = Get-InstalledModule $moduleName -ErrorAction SilentlyContinue
+        if (!$installedModule) {
+            Write-Progress "$moduleName module is not installed."
+            Write-Progress "Installing $moduleName Module"
+            Write-Host "Installing $moduleName Module..." -ForegroundColor Green
             Install-Module $moduleName -RequiredVersion $requiredVersion -Confirm:$false -Force
-            Write-Host "$moduleName Module installed successfully."
+            Write-Progress "$moduleName Module installed successfully."
         }
         else {
-            Write-Progress "$moduleName Module Version $requiredVersion is already installed." -Completed
+            $stringVersion = (Get-InstalledModule $moduleName).Version.ToString()
+            Write-Progress "$moduleName module is already installed with the version " 
+            Write-Progress $stringVersion
+    
+            if (!($stringVersion -eq $requiredVersion)) {
+                Write-Host "Module version is different from $requiredVersion. Installing the $requiredVersion version"
+                Write-Host "Installing $moduleName $requiredVersion Module..." -ForegroundColor Green
+                Install-Module $moduleName -RequiredVersion $requiredVersion -Confirm:$false -Force
+                Write-Host "$moduleName Module installed successfully."
+            }
+            else {
+                Write-Progress "$moduleName Module Version $requiredVersion is already installed." -Completed
+            }
         }
-    }
-    Write-Host "Importing $moduleName Module"
-
-    if(Get-Module -ListAvailable -Name $moduleName) {
-        Write-Host "Module $moduleName $requiredVersion is already imported."
-    }
-    else {
-        Write-Host "Importing $moduleName $requiredVersion Module..."
-        Import-Module $moduleName -Scope Global -RequiredVersion $requiredVersion -ErrorAction SilentlyContinue
     }
 }
 
@@ -45,6 +43,7 @@ function ImportCloudMModules ([String]$WorkFolder, [bool]$limitedScope) {
     ImportModules -moduleName Microsoft.Graph.Identity.DirectoryManagement -requiredVersion 2.10.0
     ImportModules -moduleName Microsoft.Graph.Applications -requiredVersion 2.10.0
     if ($limitedScope) {
+        ImportModules -moduleName Microsoft.Graph.Users -requiredVersion 2.10.0
         ImportModules -moduleName Microsoft.Graph.Files -requiredVersion 2.10.0
         ImportModules -moduleName Microsoft.Graph.Sites -requiredVersion 2.10.0
         ImportModules -moduleName Microsoft.Graph.Groups -requiredVersion 2.10.0
