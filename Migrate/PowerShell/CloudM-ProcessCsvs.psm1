@@ -281,7 +281,7 @@ function CreateUpdateApplicationAccessPolicy([parameter(mandatory)][String]$AppI
   
     Write-Host "Creating Policy for: $MailGroupAlias"
     $policy = { 
-        New-ApplicationAccessPolicy -AppId $AppId -PolicyScopeGroupId $MailGroupAlias -AccessRight RestrictAccess -Description “Restricted policy for App $AppName ($AppId)" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult 
+        New-ApplicationAccessPolicy -AppId $AppId -PolicyScopeGroupId $MailGroupAlias -AccessRight RestrictAccess -Description "Restricted policy for App $AppName ($AppId)" -ErrorAction SilentlyContinue -ErrorVariable ErrorResult 
         CheckErrors -ErrorToProcess $ErrorResult
     } | RetryCommand -TimeoutInSeconds 2 -RetryCount 10 -Context "Create Application Access Policy"
     Write-Host "Created Policy for: $MailGroupAlias with Id: $($policy.Identity)" -ForegroundColor Green
