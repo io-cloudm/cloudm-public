@@ -67,7 +67,7 @@ function CreateApplication($appNameProvided, $redirectUris) {
     $alwaysOnUI = New-Object -TypeName Microsoft.Graph.PowerShell.Models.MicrosoftGraphApplication
     $alwaysOnUI.DisplayName = $appName
     $alwaysOnUI.Web.ImplicitGrantSettings.EnableIdTokenIssuance = $true
-    $alwaysOnUI.Web.RedirectUris = @('{0}/api/OfficeExport/callback' -f $redirectUris), ('{0}/api/OfficeImport/callback' -f $redirectUris)
+    $alwaysOnUI.Web.RedirectUris = @('{0}/api/OfficeExport/callback' -f $redirectUris), ('{0}/api/connectionsOfficeDelegatedAd/callback' -f $redirectUris), ('{0}/api/OfficeImport/callback' -f $redirectUris)
     $alwaysOnUI.Web.HomePageUrl = $appHomePageUrl
     $alwaysOnUI.RequiredResourceAccess = $requiredResourceAccess
     $alwaysOnUI.SignInAudience = "AzureADMyOrg"
