@@ -377,6 +377,15 @@ function GetSecurePassword ($password) {
 function CreateAzureAppRegistration() {
     $nl = [Environment]::NewLine
     Write-Host "(*) mark required fields"
+    $requireProxy = Read-Host "$($nl)Do you need to connect to Microsoft Graph via a proxy? (yes/no)"
+    if($requireProxy -eq "yes") {
+        if (Connect-MgWithProxy) {
+            Write-Host "Proxy connection successful." -ForegroundColor Green
+        } else {
+            Write-Host "Proxy connection failed. Exiting script." -ForegroundColor Red
+            return
+        }
+    }
     $certificatePassword = Read-Host "$($nl)Enter Your Certificate Password " 
     $location = Read-Host "$($nl)Enter the file location to save certificate * "
     $appName = Read-Host "$($nl)Enter the application Name * "
@@ -395,6 +404,47 @@ function CreateAzureAppRegistration() {
         CreateAppRegistration -certificateFolder "$($location)" -certificatePassword $certificatePassword -appName "$($appName)" -azureEnvironment $azureEnvironment
     }
 }
+
+function Connect-MgWithProxy {
+    [CmdletBinding()]
+    param ()
+
+    Write-Host "`n=== Microsoft Graph Proxy Connector ===`n" -ForegroundColor Cyan
+       
+    $proxyServer = Read-Host "Enter Proxy Server (e.g., http://your.proxy.server)"
+    $proxyPort = Read-Host "Enter Proxy Port (e.g., 8080)"
+    $useAuth = Read-Host "Does your proxy require authentication? (yes/no)"
+
+    $proxyUri = "${proxyServer}:${proxyPort}"
+    $proxy = New-Object System.Net.WebProxy($proxyUri, $true)
+
+    if ($useAuth -eq "yes") {
+        $proxyUser = Read-Host "Enter Proxy Username"
+        $proxyPass = Read-Host "Enter Proxy Password" -AsSecureString
+        $proxy.Credentials = New-Object System.Net.NetworkCredential($proxyUser, $proxyPass)
+    }
+
+    [System.Net.WebRequest]::DefaultWebProxy = $proxy
+    $env:http_proxy = $proxyUri
+    $env:https_proxy = $proxyUri
+
+    Write-Host "`nTesting proxy connection to Microsoft Graph..." -ForegroundColor Cyan
+
+    try {
+        $testResponse = Invoke-WebRequest -Uri "https://graph.microsoft.com/v1.0/$metadata" -Proxy $proxyUri -UseBasicParsing -TimeoutSec 10
+        if ($testResponse.StatusCode -eq 200) {
+            Write-Host "Proxy test successful. Microsoft Graph is reachable." -ForegroundColor Green
+            return $true
+        } else {
+            Write-Host "Unexpected response code: $($testResponse.StatusCode)" -ForegroundColor Yellow
+            return $false
+        }
+    } catch {
+        Write-Host "Proxy test failed: $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
+
 
 CreateAzureAppRegistration
 
