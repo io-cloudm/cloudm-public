@@ -187,7 +187,10 @@ Function Build-Scopes-List([string]$Scope = "Standard")
         "https://www.googleapis.com/auth/chat.memberships.app",
         "https://www.googleapis.com/auth/chat.messages",
         "https://www.googleapis.com/auth/chat.import",
-        "https://www.googleapis.com/auth/chat.bot"
+        "https://www.googleapis.com/auth/chat.bot",
+        "https://www.googleapis.com/auth/chat.customemojis",
+        "https://www.googleapis.com/auth/chat.admin.spaces",
+        "https://www.googleapis.com/auth/chat.admin.memberships"
     )
 
     $CombinedScopes = @()
