@@ -157,7 +157,8 @@ Function Build-Scopes-List([string]$Scope = "Standard")
     "https://www.googleapis.com/auth/user.phonenumbers.read",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/forms"
+    "https://www.googleapis.com/auth/forms",
+    "https://www.googleapis.com/auth/cloud-identity.policies.readonly"
     )
 
     $SourceLimitedScopes = @(
