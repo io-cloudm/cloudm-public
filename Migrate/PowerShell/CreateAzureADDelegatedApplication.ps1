@@ -29,7 +29,14 @@
     }
     Write-Host "Importing $moduleName Module"
 
-    Import-Module $moduleName -Scope Global -RequiredVersion $requiredVersion -ErrorAction SilentlyContinue
+    # CMT-8786: -ErrorAction Stop so a failed import fails loudly here rather than surfacing later
+    # as a confusing "cmdlet is not recognized" when the module's cmdlets are used.
+    Import-Module $moduleName -Scope Global -RequiredVersion $requiredVersion -ErrorAction Stop
+
+    # Confirm the module actually loaded; a partial/failed load would otherwise leave its cmdlets missing.
+    if (!(Get-Module -Name $moduleName)) {
+        throw "Module '$moduleName' ($requiredVersion) failed to import; required cmdlets are unavailable."
+    }
 }
 
 function CreateInteractiveConnection($azureEnvironment) {
@@ -71,6 +78,9 @@ function CreateApplication($appNameProvided, $redirectUris) {
     $alwaysOnUI.Web.HomePageUrl = $appHomePageUrl
     $alwaysOnUI.RequiredResourceAccess = $requiredResourceAccess
     $alwaysOnUI.SignInAudience = "AzureADMyOrg"
+    # CMT-8786: allow the device-code (public client) flow so the delegated application can be
+    # consented without an interactive browser redirect (matches the hosted-created app object).
+    $alwaysOnUI.IsFallbackPublicClient = $true
     $alwaysOnUI.Info.PrivacyStatementUrl = "https://www.cloudm.io/legal/privacy-policy"
     $alwaysOnUI.Info.TermsOfServiceUrl = "https://www.cloudm.io/legal/terms-conditions"
     $alwaysOnUI.RequiredResourceAccess = $requiredResourceAccess
