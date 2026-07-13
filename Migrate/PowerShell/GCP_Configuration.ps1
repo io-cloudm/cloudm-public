@@ -95,13 +95,8 @@ Function Write-Log([string]$LogPath, [string]$Message, [bool]$Highlight=$false)
 	}
 }
 
-# Ensure that GoogleCloud module is installed
 Function Install-Dependencies([string]$LogPath)
 {
-    Write-Log $LogPath "Ensuring GoogleCloud module..."
-        
-    Import-Module GoogleCloud    
-
     try {
         # Test to see if gcloud init has been run
         $CurrentProject = gcloud config get project
