@@ -1,0 +1,3 @@
+# Shell scripts must keep LF endings. A .sh file checked out with CRLF fails in
+# Google Cloud Shell with "bad interpreter: /usr/bin/env bash^M".
+*.sh text eol=lf
