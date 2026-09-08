@@ -93,6 +93,8 @@ function GetMicrosoftGraphPermissionsRoles([bool]$limitedScope) {
         "6be147d2-ea4f-4b5a-a3fa-3eab6f3c140a"
         #ChannelMessage.Read.All
         "7b2449af-6ccd-4f4d-9f78-e550c193f0d1"
+        #InformationProtectionPolicy.Read.All
+        "19da66cb-0fb0-4390-b071-ebc76a349482"
     )
     switch ($limitedScope) {
         #Sites.Selected
