@@ -77,6 +77,17 @@ and there is an extra step later to configure the Chat app in the console. One o
 its settings cannot be undone once saved, so read that step before changing
 anything.
 
+### Remediating links as well?
+
+Decide now as well. Link Remediation rewrites the links inside migrated Google
+Docs, Sheets and Slides, and it writes through the Docs, Sheets and Slides APIs,
+which the Drive access in the scopes above does not cover. Add
+`--include-link-remediation` to the commands in the next two steps if the
+migration will run a Link Remediation pass. Only the destination tenant needs it.
+
+Without it the migration itself still works, and only the link rewriting fails,
+with an authorisation error.
+
 ## Preview the changes
 
 This validates your input and prints every `gcloud` call without running any of
@@ -86,9 +97,10 @@ them. Nothing in your tenant changes.
 ./gcp_configuration.sh --dry-run <walkthrough-project-id/> cloudm-migrate Standard
 ```
 
-Change `Standard` if you picked a different scope, and add `--include-chat` if you
-are migrating Chat. The copy button pastes the command without running it, so you
-can edit it before pressing enter.
+Change `Standard` if you picked a different scope, and add `--include-chat` or
+`--include-link-remediation` if you are migrating Chat or remediating links. The
+copy button pastes the command without running it, so you can edit it before
+pressing enter.
 
 Read the output and check the project id and scope are what you expect.
 
@@ -117,7 +129,8 @@ the right project before running it.
 ```
 
 Apply the same edits as the previous step if you changed the scope, added
-`--include-chat`, or used your own service account name.
+`--include-chat` or `--include-link-remediation`, or used your own service
+account name.
 
 This takes a few minutes. When it finishes it prints the client id, the service
 account email and the key path, and leaves a clickable delegation link. Leave that
