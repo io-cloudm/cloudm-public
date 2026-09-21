@@ -23,7 +23,8 @@ directly:
 ```
 
 `SCOPE` is one of `Standard`, `SourceLimited`, `DestinationLimited`, `Vault`,
-`Storage` or `All`. Add `--include-chat` if the migration includes Google Chat.
+`Storage` or `All`. Add `--include-chat` if the migration includes Google Chat,
+and `--include-link-remediation` if it runs a Link Remediation pass.
 
 Use `--dry-run` first. It validates your input and prints every `gcloud` command
 without running any of them, so you can see exactly what will happen before
