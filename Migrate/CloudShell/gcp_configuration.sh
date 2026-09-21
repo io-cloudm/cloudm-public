@@ -295,7 +295,6 @@ validate_args() {
 readonly BASE_SCOPES=(
     "https://www.googleapis.com/auth/gmail.settings.basic"
     "https://www.googleapis.com/auth/gmail.settings.sharing"
-    "https://www.google.com/m8/feeds"
     "https://www.googleapis.com/auth/admin.directory.group"
     "https://www.googleapis.com/auth/admin.directory.user"
     "https://www.googleapis.com/auth/admin.directory.resource.calendar"
