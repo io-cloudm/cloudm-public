@@ -17,7 +17,7 @@
   It must start with a lower case letter, followed by one or more lower case alphanumerical characters that can be separated by hyphens. It cannot have a trailing hyphen.
 
   .PARAMETER Scope
-  Specifies the scopes required for the ClouM Migrate. Scope must be one of 'All', 'Standard', 'SourceLimited', 'DestinationLimited','Vault', 'Spaces' or 'Storage'.
+  Specifies the scopes required for the ClouM Migrate. Scope must be one of 'All', 'Standard', 'StandardLinkRemediation', 'SourceLimited', 'DestinationLimited','Vault', 'Spaces' or 'Storage'.
 
   .PARAMETER KeyType
   Specifies a the type of key to generate. Must be one of 'P12' or 'JSON'. P12 is used as a default
@@ -56,9 +56,9 @@ param(
     [String]
     $ServiceAccountId,
 
-    [Parameter(Mandatory=$true, Position=2, ValueFromPipeline=$false, HelpMessage="Scope must be one of 'All', 'Standard', 'SourceLimited', 'DestinationLimited', 'Vault', 'Spaces' or 'Storage'")]
+    [Parameter(Mandatory=$true, Position=2, ValueFromPipeline=$false, HelpMessage="Scope must be one of 'All', 'Standard', 'StandardLinkRemediation', 'SourceLimited', 'DestinationLimited', 'Vault', 'Spaces' or 'Storage'")]
     [Alias("S")]
-    [ValidateSet("All", "Standard", "SourceLimited", "DestinationLimited", "Vault", "Spaces", "Storage")]
+    [ValidateSet("All", "Standard", "StandardLinkRemediation", "SourceLimited", "DestinationLimited", "Vault", "Spaces", "Storage")]
     [String]
     $Scope = "Standard",
 
@@ -129,8 +129,6 @@ Function Build-Scopes-List([string]$Scope = "Standard")
     $BaseScopes = @(
     "https://www.googleapis.com/auth/gmail.settings.basic",
     "https://www.googleapis.com/auth/gmail.settings.sharing",        
-    "https://sites.google.com/feeds/",
-    "https://www.google.com/m8/feeds",
     "https://www.googleapis.com/auth/admin.directory.group",
     "https://www.googleapis.com/auth/admin.directory.user",
     "https://www.googleapis.com/auth/admin.directory.resource.calendar",
@@ -188,18 +186,28 @@ Function Build-Scopes-List([string]$Scope = "Standard")
         "https://www.googleapis.com/auth/chat.admin.memberships"
     )
 
+    # Link Remediation rewrites links inside Docs, Sheets and Slides files, which
+    # needs the editor scope for each. Drive alone is not enough: the Docs, Sheets
+    # and Slides APIs reject calls that carry only the Drive scope.
+    $LinkRemediationScopes = @(
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/presentations"
+    )
+
     $CombinedScopes = @()
 
     Switch($Scope) 
     {
         "Standard" { $CombinedScopes= $BaseScopes + $StandardScopes}
+        "StandardLinkRemediation" { $CombinedScopes= $BaseScopes + $StandardScopes + $LinkRemediationScopes}
         "SourceLimited" { $CombinedScopes= $BaseScopes + $SourceLimitedScopes }
         "DestinationLimited" { $CombinedScopes= $BaseScopes + $DestinationLimitedScopes }
         "Vault" { $CombinedScopes= $BaseScopes + $VaultScopes + $StandardScopes}
         "Spaces" { $CombinedScopes = $BaseScopes + $SpacesScopes + $StandardScopes}
         "Storage" { $CombinedScopes= $BaseScopes + $StandardScopes}
-        "All" { $CombinedScopes= $BaseScopes + $VaultScopes + $SpacesScopes + $StandardScopes}
-        default { $CombinedScopes= $BaseScopes + $VaultScopes + $SpacesScopes + $StandardScopes}
+        "All" { $CombinedScopes= $BaseScopes + $VaultScopes + $SpacesScopes + $StandardScopes + $LinkRemediationScopes}
+        default { $CombinedScopes= $BaseScopes + $VaultScopes + $SpacesScopes + $StandardScopes + $LinkRemediationScopes}
     }
 
     Return $CombinedScopes
@@ -232,19 +240,29 @@ Function Build-API-List([string]$Scope = "Standard")
     $SpacesApis = @(
     "chat.googleapis.com"
     )
+
+    # Required by the Link Remediation scopes. Without these the migration still
+    # authenticates but link replacement fails with "<API> has not been used in
+    # project <id> before or it is disabled".
+    $LinkRemediationApis = @(
+    "docs.googleapis.com",
+    "sheets.googleapis.com",
+    "slides.googleapis.com"
+    )
     
     $CombinedApis = @()
 
     Switch($Scope) 
     {
         "Standard" { $CombinedApis = $BaseApis }
+        "StandardLinkRemediation" { $CombinedApis = $BaseApis + $LinkRemediationApis }
         "SourceLimited" { $CombinedApis = $BaseApis }
         "DestinationLimited" { $CombinedApis = $BaseApis }
         "Vault" { $CombinedApis = $BaseApis + $VaultApis + $CloudStorageApis }
         "Spaces" { $CombinedApis = $BaseApis + $SpacesApis + $CloudStorageApis }
         "Storage" { $CombinedApis = $BaseApis + $CloudStorageApis }
-        "All" { $CombinedApis = $BaseApis + $VaultApis + $SpacesApis + $CloudStorageApis }
-        default { $CombinedApis = $BaseApis + $VaultApis + $SpacesApis + $CloudStorageApis }
+        "All" { $CombinedApis = $BaseApis + $VaultApis + $SpacesApis + $CloudStorageApis + $LinkRemediationApis }
+        default { $CombinedApis = $BaseApis + $VaultApis + $SpacesApis + $CloudStorageApis + $LinkRemediationApis }
     }
 
     Return $CombinedApis

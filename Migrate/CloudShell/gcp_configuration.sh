@@ -19,6 +19,7 @@
 #   ./gcp_configuration.sh test-cloudm-io-migrate test-service-account-1 Standard
 #   ./gcp_configuration.sh test-cloudm-io-migrate test-service-account-1 Vault
 #   ./gcp_configuration.sh test-cloudm-io-migrate test-service-account-1 Standard ~/gcpconfig
+#   ./gcp_configuration.sh test-cloudm-io-migrate test-service-account-1 Standard --include-link-remediation
 #   ./gcp_configuration.sh --dry-run my-project-id my-service-acct All
 #
 # Key format: this script produces a JSON key. In CloudM Migrate set the Google
@@ -46,6 +47,7 @@ SCOPE="Standard"
 OUTPUT_PATH="${DEFAULT_OUTPUT_PATH}"
 DRY_RUN=false
 INCLUDE_CHAT=false
+INCLUDE_LINK_REMEDIATION=false
 LOG_PATH=""
 
 # Values discovered as the script runs. Set as globals rather than returned so
@@ -160,6 +162,10 @@ Options:
                        API, for migrations that include Google Chat. The Chat
                        app itself still has to be configured by hand, and the
                        script prints those steps at the end.
+  --include-link-remediation
+                       Also grant the Google Docs, Sheets and Slides scopes and
+                       enable those APIs, for migrations that run a Link
+                       Remediation pass. Needed on the destination tenant only.
   -h, --help           Show this help.
 USAGE
 }
@@ -175,6 +181,10 @@ parse_args() {
                 ;;
             --include-chat)
                 INCLUDE_CHAT=true
+                shift
+                ;;
+            --include-link-remediation)
+                INCLUDE_LINK_REMEDIATION=true
                 shift
                 ;;
             -h|--help)
@@ -285,8 +295,6 @@ validate_args() {
 readonly BASE_SCOPES=(
     "https://www.googleapis.com/auth/gmail.settings.basic"
     "https://www.googleapis.com/auth/gmail.settings.sharing"
-    "https://sites.google.com/feeds/"
-    "https://www.google.com/m8/feeds"
     "https://www.googleapis.com/auth/admin.directory.group"
     "https://www.googleapis.com/auth/admin.directory.user"
     "https://www.googleapis.com/auth/admin.directory.resource.calendar"
@@ -376,6 +384,25 @@ readonly CHAT_APIS=(
     "chat.googleapis.com"
 )
 
+# Link Remediation, from CloudM Migrate 5.2, added by --include-link-remediation.
+# The link parser rewrites the file content of Google Docs, Sheets and Slides
+# through those three APIs, which the Drive scope does not cover, so without
+# these every native rewrite fails authorisation. Additive to whichever scope was
+# chosen rather than a scope of its own, on the same reasoning as Chat: a link
+# remediation run is a Standard or Vault migration that also remediates links.
+# Only the destination tenant needs them.
+readonly LINK_REMEDIATION_SCOPES=(
+    "https://www.googleapis.com/auth/documents"
+    "https://www.googleapis.com/auth/spreadsheets"
+    "https://www.googleapis.com/auth/presentations"
+)
+
+readonly LINK_REMEDIATION_APIS=(
+    "docs.googleapis.com"
+    "sheets.googleapis.com"
+    "slides.googleapis.com"
+)
+
 # Populates the SCOPES_TO_USE global for the requested scope.
 build_scopes_list() {
     case "${SCOPE}" in
@@ -402,6 +429,10 @@ build_scopes_list() {
     if [[ "${INCLUDE_CHAT}" == "true" ]]; then
         SCOPES_TO_USE+=("${CHAT_SCOPES[@]}")
     fi
+
+    if [[ "${INCLUDE_LINK_REMEDIATION}" == "true" ]]; then
+        SCOPES_TO_USE+=("${LINK_REMEDIATION_SCOPES[@]}")
+    fi
 }
 
 # Populates the APIS_TO_ENABLE global for the requested scope.
@@ -423,6 +454,10 @@ build_api_list() {
 
     if [[ "${INCLUDE_CHAT}" == "true" ]]; then
         APIS_TO_ENABLE+=("${CHAT_APIS[@]}")
+    fi
+
+    if [[ "${INCLUDE_LINK_REMEDIATION}" == "true" ]]; then
+        APIS_TO_ENABLE+=("${LINK_REMEDIATION_APIS[@]}")
     fi
 }
 
